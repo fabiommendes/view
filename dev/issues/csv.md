@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_progress
 tags: [csv]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -21,3 +21,11 @@ creator: claude
 ## Critérios de aceitação
 
 - Testes com fixtures `.csv` e `.tsv`, incluindo campo com vírgula entre aspas.
+
+## Plano
+
+- [ ] Renderizador `Internal::Csv` com `csv` e `comfy-table`: delimitador, cabeçalho e largura do terminal (R1, R2)
+- [ ] Corte em 10 000 linhas com aviso (R3)
+- [ ] Ligar à cadeia e ao cabeçalho `# csv→tabela interno`, para arquivo e conteúdo em memória (R4)
+- [ ] Testes com `table.csv`, `table.tsv` e o corte
+- [ ] `README.md` e issue em `in_review`
