@@ -263,3 +263,167 @@ fn stdin_toml_gets_highlighted() {
         assert!(stdout_of(&out).contains("\x1b["));
     }
 }
+
+mod structured {
+    use super::{EXAMPLES, stdout_of, view};
+    use std::io::Write;
+    use std::process::{Command, Output, Stdio};
+
+    fn run(format: &str, example: &str) -> Output {
+        view()
+            .args([
+                "--no-pager",
+                "-q",
+                "--as",
+                format,
+                &format!("{EXAMPLES}/{example}"),
+            ])
+            .output()
+            .unwrap()
+    }
+
+    fn run_stdin(format: &str, content: &[u8]) -> Output {
+        run_stdin_args(&["--no-pager", "-q", "--as", format], content)
+    }
+
+    fn run_stdin_args(args: &[&str], content: &[u8]) -> Output {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_view"))
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(content).unwrap();
+        child.wait_with_output().unwrap()
+    }
+
+    /// Remove sequências de cor ANSI.
+    fn plain(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    fn json_of(out: &Output) -> serde_json::Value {
+        serde_json::from_str(&plain(&stdout_of(out))).unwrap()
+    }
+
+    fn example(name: &str) -> String {
+        std::fs::read_to_string(format!("{EXAMPLES}/{name}")).unwrap()
+    }
+
+    #[test]
+    fn json_to_yaml_and_toml_files() {
+        let yaml = run("yaml", "data-no-null.json");
+        assert!(yaml.status.success());
+        let text = plain(&stdout_of(&yaml));
+        assert!(text.contains("projeto:"), "{text}");
+        assert!(text.contains("nome: view"), "{text}");
+        let toml = run("toml", "data-no-null.json");
+        assert!(toml.status.success());
+        let text = plain(&stdout_of(&toml));
+        assert!(text.contains("[projeto]"), "{text}");
+    }
+
+    #[test]
+    fn yaml_and_toml_files_to_other_formats() {
+        for (format, example_name) in [
+            ("json", "config.yaml"),
+            ("toml", "config.yaml"),
+            ("json", "config.toml"),
+            ("yaml", "config.toml"),
+        ] {
+            let out = run(format, example_name);
+            assert!(out.status.success(), "{format} {example_name}");
+            let text = plain(&stdout_of(&out));
+            assert!(text.contains("servidor"), "{text}");
+            assert!(text.contains("8080"), "{text}");
+        }
+    }
+
+    #[test]
+    fn json_yaml_json_round_trip_through_the_cli() {
+        let yaml = run("yaml", "data.json");
+        assert!(yaml.status.success());
+        let back = run_stdin("json", plain(&stdout_of(&yaml)).as_bytes());
+        assert!(back.status.success());
+        let original: serde_json::Value = serde_json::from_str(&example("data.json")).unwrap();
+        let round = json_of(&back);
+        assert_eq!(round, original);
+        assert_eq!(round.to_string(), original.to_string(), "ordem das chaves");
+    }
+
+    #[test]
+    fn stdin_converts_too() {
+        let out = run_stdin("yaml", example("data-no-null.json").as_bytes());
+        assert!(out.status.success());
+        assert!(plain(&stdout_of(&out)).contains("projeto:"));
+        let out = run_stdin("json", example("config.toml").as_bytes());
+        assert!(out.status.success());
+        assert_eq!(json_of(&out)["servidor"]["porta"], 8080);
+    }
+
+    #[test]
+    fn null_to_toml_fails_with_a_clear_error() {
+        let out = run("toml", "data.json");
+        assert!(!out.status.success());
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.starts_with("view: "), "{err}");
+        assert!(err.contains("json para toml"), "{err}");
+        assert!(!err.contains("panicked"), "{err}");
+        assert!(out.stdout.is_empty());
+    }
+
+    #[test]
+    fn invalid_source_fails_with_a_clear_error() {
+        let out = run_stdin_args(&["--no-pager", "-q", "--as", "yaml"], b"{\"a\": ");
+        assert!(!out.status.success());
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("view: "), "{err}");
+        assert!(!err.contains("panicked"), "{err}");
+    }
+
+    #[test]
+    fn same_format_or_no_as_does_not_convert() {
+        let raw = example("data.json");
+        for args in [vec!["--as", "json"], vec![]] {
+            let out = view()
+                .args(["--no-pager", "-q"])
+                .args(&args)
+                .arg(format!("{EXAMPLES}/data.json"))
+                .output()
+                .unwrap();
+            assert!(out.status.success());
+            // O `bat` mantém o texto original, inclusive o `null` que o TOML rejeitaria.
+            assert_eq!(plain(&stdout_of(&out)), raw, "{args:?}");
+        }
+    }
+
+    #[test]
+    fn header_shows_conversion_and_sink() {
+        let out = view()
+            .args(["-n", "--as", "yaml", &format!("{EXAMPLES}/data.json")])
+            .output()
+            .unwrap();
+        let text = stdout_of(&out);
+        assert!(
+            text.starts_with(&format!(
+                "$ view --as yaml {EXAMPLES}/data.json  # json→yaml interno | bat "
+            )),
+            "{text}"
+        );
+        assert!(text.trim_end().ends_with("-l yaml"), "{text}");
+    }
+}

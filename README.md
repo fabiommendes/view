@@ -30,7 +30,7 @@ final, e o cabeçalho mostra o caminho dele.
 | :-- | :-- |
 | `-q`, `--quiet` | sem cabeçalho |
 | `-n`, `--dry-run` | só imprime o comando que rodaria |
-| `--as <FORMAT>` | força o formato (`code`, `md`, `json`, `yaml`, `dir`, `binary`...) |
+| `--as <FORMAT>` | força o formato (`code`, `md`, `json`, `yaml`, `dir`, `binary`...); entre `json`, `yaml` e `toml` converte |
 | `--no-pager` | escreve direto no stdout |
 
 O pager vem de `$VIEW_PAGER`, depois `$PAGER`, com padrão `less -RF`. Sem
@@ -38,7 +38,7 @@ terminal no stdout, não há pager.
 
 ## Cadeias
 
-Backends internos (Rust) ainda não existem e são pulados.
+Backends internos (Rust) ainda não implementados são pulados.
 
 | Tipo | Cadeia |
 | :-- | :-- |
@@ -47,11 +47,26 @@ Backends internos (Rust) ainda não existem e são pulados.
 | diretório | `eza -la --tree -L2 --color=always` → `ls -la --color=always` |
 | binário | `hexyl` → `xxd` |
 | json, yaml, toml | `bat -l <tipo>` → `cat` |
+| json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
 | html, svg, csv | interno (pendente) → `bat -l <tipo>` → `cat` |
 | url, imagem, pdf, arquivo compactado, mídia | interno (pendente) |
 
 A detecção usa diretório, prefixo `http(s)://` e extensão. Magic bytes ficam
 para depois.
+
+## Conversão entre json, yaml e toml
+
+`view --as yaml foo.json` converte internamente (a ordem das chaves é mantida)
+e passa o resultado para `bat -l yaml`. Vale para arquivo e stdin; sem
+extensão reconhecida, o formato de origem é adivinhado pelo conteúdo. O
+cabeçalho mostra os dois passos:
+
+```
+$ view --as yaml foo.json  # json→yaml interno | bat --color=always --paging=never --style=plain -l yaml
+```
+
+Conversão impossível (ex. `null` para toml) termina com erro, sem saída.
+`--as` igual ao formato de origem não converte.
 
 ## Desenvolvimento
 

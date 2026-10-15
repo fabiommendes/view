@@ -1,6 +1,6 @@
 ---
 type: issue
-status: in_progress
+status: in_review
 tags: [json, yaml, toml]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -32,4 +32,4 @@ creator: claude
 - [x] Módulo `convert` (parse e serialização json, yaml, toml) com erros claros (R1, R2, R3).
 - [x] Backend `Pipe`: renderizador interno cujos bytes alimentam outro backend; `Internal::Convert` (R1, R5).
 - [x] Rota: `--as` entre formatos estruturados converte; igual à origem não muda (R4).
-- [ ] Testes de integração (pares de conversão, stdin, erro de `null` em TOML) e `README.md`.
+- [x] Testes de integração (pares de conversão, stdin, erro de `null` em TOML) e `README.md`.
