@@ -14,6 +14,16 @@ $ bat -l md README.md
 ────────────────────────────────────────
 ```
 
+## Instalação
+
+```
+cargo install view-cli
+```
+
+O pacote se chama `view-cli`; o comando instalado é `view`. Os visualizadores
+externos (`bat`, `glow`, `eza`, `pdftotext`...) são opcionais: sem eles, cada
+cadeia cai no próximo backend.
+
 ## Uso
 
 ```
@@ -126,6 +136,10 @@ $ view --as yaml foo.json  # json→yaml interno | bat --color=always --paging=n
 
 Conversão impossível (ex. `null` para toml) termina com erro, sem saída.
 `--as` igual ao formato de origem não converte.
+
+## Licença
+
+MIT ou Apache-2.0, à escolha.
 
 ## Desenvolvimento
 

@@ -4,10 +4,12 @@ Orientações para agentes de código de IA (e para pessoas) que trabalham neste
 
 ## Idioma
 
-Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002-idioma-dos-repositorios.md`:
+Nível 2 (aplicativo público), conforme `~/git/tools/tooling-root/dev/adr/0002-idioma-dos-repositorios.md`:
 
-- Em português (pt-BR): documentos, comentários no código e mensagens de commit.
-- Em inglês: identificadores.
+- Em português (pt-BR): `AGENTS.md`, tudo em `dev/` e mensagens de commit.
+- Em inglês: código, comentários, `README.md` e demais documentos para o usuário.
+- Mensagens da CLI: em pt-BR, en e es (issue `i18n`).
+- A migração do que ainda está em pt-BR está na issue `language-level-2`.
 
 ## O que é
 

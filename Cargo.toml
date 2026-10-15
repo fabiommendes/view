@@ -1,7 +1,17 @@
 [package]
-name = "view"
+name = "view-cli"
 version = "0.1.0"
 edition = "2024"
+description = "Open files, URLs and stdin in the right terminal viewer, inside a pager"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["cli", "viewer", "pager", "terminal", "preview"]
+categories = ["command-line-utilities"]
+exclude = ["dev/", "tests/", "justfile", "AGENTS.md", "CLAUDE.md"]
+
+[[bin]]
+name = "view"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
