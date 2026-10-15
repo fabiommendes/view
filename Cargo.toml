@@ -13,6 +13,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 infer = "0.22.0"
 libc = "0.2.190"
 mime_guess = "2.0.5"
+resvg = "0.48.1"
 serde-saphyr = "2.0.0"
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 terminal_size = "0.4.4"

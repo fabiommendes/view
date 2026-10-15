@@ -51,6 +51,19 @@ impl TermSize {
     }
 }
 
+/// Maior área de tela, em pixels, que uma imagem pode ocupar: a largura do
+/// terminal (80 colunas sem terminal) e, se conhecida, a altura menos as
+/// `reserved_rows` linhas e a do newline final. `None` na altura: livre.
+pub fn screen_box(size: Option<TermSize>, reserved_rows: u32) -> (f64, Option<f64>) {
+    let cell = size.and_then(|s| s.cell_px).unwrap_or(DEFAULT_CELL);
+    let cols = size.map_or(80, |s| s.cols);
+    let rows = size.map(|s| s.rows.saturating_sub(reserved_rows + 1).max(1));
+    (
+        f64::from(cols) * cell.0,
+        rows.map(|r| f64::from(r) * cell.1),
+    )
+}
+
 /// Colunas e linhas de células que mostram uma imagem de `disp_w` x `disp_h`
 /// pixels de tela, sem ampliar e sem passar de `max_cols` x `max_rows`
 /// (`None`: altura livre), mantendo a proporção. `cell` é o tamanho da célula
@@ -166,12 +179,23 @@ pub fn render(
 ) -> Result<()> {
     let img = image::load_from_memory(bytes)
         .context("não foi possível decodificar a imagem (suportados: png, jpeg, gif, webp)")?;
+    render_image(&img, protocol, size, reserved_rows, out)
+}
+
+/// Escreve uma imagem já decodificada em `out`, como `render`.
+pub fn render_image(
+    img: &DynamicImage,
+    protocol: Protocol,
+    size: Option<TermSize>,
+    reserved_rows: u32,
+    out: &mut dyn Write,
+) -> Result<()> {
     match protocol {
         Protocol::HalfBlock => {
-            out.write_all(render_half_blocks(&img, size, reserved_rows).as_bytes())?
+            out.write_all(render_half_blocks(img, size, reserved_rows).as_bytes())?
         }
         Protocol::Kitty => {
-            let sequence = render_kitty(&img, size, reserved_rows)?;
+            let sequence = render_kitty(img, size, reserved_rows)?;
             out.write_all(sequence.as_bytes())?;
         }
     }

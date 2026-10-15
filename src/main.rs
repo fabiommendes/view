@@ -10,6 +10,7 @@ mod image;
 mod pager;
 mod route;
 mod stdin;
+mod svg;
 mod table;
 
 use std::io::{IsTerminal, Write};
@@ -147,6 +148,16 @@ fn run(cli: &Cli) -> Result<()> {
         invalid_json = true;
     }
 
+    // Svg inválido também não: mostra o texto com o próximo da cadeia.
+    let mut invalid_svg = false;
+    if matches!(backend, Backend::Internal(Internal::Svg))
+        && source_bytes(&input, content.as_deref()).is_some_and(|b| !svg::is_valid(&b))
+        && let Some(next) = backend::resolve(&chain[1..], &path)
+    {
+        backend = next.backend;
+        invalid_svg = true;
+    }
+
     let mut command = header::command_line(
         backend,
         &input,
@@ -170,11 +181,14 @@ fn run(cli: &Cli) -> Result<()> {
             .flatten()
             .into_iter()
             .collect();
-        if matches!(backend, Backend::Internal(Internal::Image)) {
+        if matches!(backend, Backend::Internal(Internal::Image | Internal::Svg)) {
             notes.push(format!("# imagem: {}", image_protocol.name()));
         }
         if invalid_json {
             notes.push("# json inválido: mostrado como está".to_owned());
+        }
+        if invalid_svg {
+            notes.push("# svg inválido: mostrado como texto".to_owned());
         }
         header::render(&command, &notes, usize::from(width))
     } else {
@@ -217,11 +231,7 @@ fn is_plain_text(kind: Kind) -> bool {
 /// Formato estruturado de uma entrada que a detecção não identificou (ex.
 /// yaml pelo stdin, ou json num arquivo sem extensão), pelo conteúdo.
 fn sniff_source(input: &Input, content: Option<&[u8]>) -> Option<Kind> {
-    let bytes = match (input, content) {
-        (_, Some(bytes)) => bytes.to_vec(),
-        (Input::Target(path), None) => std::fs::read(path).ok()?,
-        (Input::Stdin, None) => return None,
-    };
+    let bytes = source_bytes(input, content)?;
     let format = convert::sniff(std::str::from_utf8(&bytes).ok()?)?;
     Some(format.kind())
 }
@@ -234,16 +244,21 @@ fn is_json_lines(input: &Input) -> bool {
     }))
 }
 
+/// Bytes da entrada: o conteúdo em memória ou o arquivo. `None` se o arquivo
+/// é ilegível ou se não há conteúdo (`-n` no stdin).
+fn source_bytes(input: &Input, content: Option<&[u8]>) -> Option<Vec<u8>> {
+    match (input, content) {
+        (_, Some(bytes)) => Some(bytes.to_vec()),
+        (Input::Target(path), None) => std::fs::read(path).ok(),
+        (Input::Stdin, None) => None,
+    }
+}
+
 /// Se a entrada é json válido. Entrada ilegível conta como válida, para o
 /// erro de leitura aparecer no backend.
 fn is_valid_json(input: &Input, content: Option<&[u8]>) -> bool {
-    let bytes = match (input, content) {
-        (_, Some(bytes)) => bytes.to_vec(),
-        (Input::Target(path), None) => match std::fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(_) => return true,
-        },
-        (Input::Stdin, None) => return true,
+    let Some(bytes) = source_bytes(input, content) else {
+        return true;
     };
     std::str::from_utf8(&bytes)
         .is_ok_and(|text| convert::convert(text, Format::Json, Format::Json).is_ok())

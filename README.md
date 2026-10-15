@@ -22,8 +22,10 @@ view [OPTIONS] [TARGET]
 
 `TARGET` ausente ou `-` lê o stdin inteiro e detecta o formato pelo conteúdo
 (magic bytes, binário ou texto; texto que parece JSON ou TOML vira JSON ou
-TOML, e texto que começa com `<!doctype html` ou `<html` vira HTML). Os backends recebem os bytes por pipe e o cabeçalho mostra `-`; `eza` e
-`ls`, que exigem caminho, recebem um arquivo temporário (modo 0600) apagado ao
+TOML, texto que começa com `<!doctype html` ou `<html` vira HTML, e texto que
+começa com `<svg` ou `<?xml` seguido de `<svg` vira SVG). Os backends recebem
+os bytes por pipe e o cabeçalho mostra `-`; os que exigem caminho (`eza`, `ls`,
+`bsdtar`, `tar`, `ffprobe`) recebem um arquivo temporário (modo 0600) apagado ao
 final, e o cabeçalho mostra o caminho dele.
 
 | Opção | Efeito |
@@ -39,8 +41,6 @@ terminal no stdout, não há pager.
 
 ## Cadeias
 
-Backends internos (Rust) ainda não implementados são pulados.
-
 | Tipo | Cadeia |
 | :-- | :-- |
 | código, texto | `bat --color=always --paging=never --style=plain` → `cat` |
@@ -52,7 +52,7 @@ Backends internos (Rust) ainda não implementados são pulados.
 | json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
 | html | conversão interna (`htmd`, sem script, estilo e comentário) → cadeia de markdown (`glow` → `bat -l md` → `cat`) |
 | csv, tsv | tabela interna (`csv` + `comfy-table`) → `bat -l csv` → `cat` |
-| svg | interno (pendente) → `bat -l svg` → `cat` |
+| svg | interno (`resvg`), como imagem, sem pager (ver abaixo); inválido → `bat -l xml` → `cat` |
 | url | baixa e usa a cadeia do tipo da resposta (ver abaixo) |
 | imagem | interno, direto no terminal, sem pager (ver abaixo) |
 | pdf | `pdftotext -layout <alvo> -` |
@@ -75,6 +75,9 @@ passam pelo pager e `--no-pager` não muda nada: a imagem (e o cabeçalho, com
 - kitty: com `TERM=xterm-kitty`, `KITTY_WINDOW_ID` ou `TERM_PROGRAM=ghostty` e
   stdout num terminal. Transmite o PNG com `a=T`.
 - meio-bloco: o resto (inclusive pipe e redirecionamento). Usa `▀` truecolor.
+- SVG: rasterizado com `resvg` (fontes do sistema) sobre fundo branco, no
+  maior tamanho que cabe no terminal (pode ampliar). SVG inválido é mostrado
+  como texto (`bat -l xml`), com `# svg inválido` no cabeçalho.
 - Tamanho: no máximo a largura do terminal e a altura da tela menos o
   cabeçalho, na proporção da imagem (célula em pixels via `TIOCGWINSZ`; sem
   ela, 1:2). Imagem pequena não é ampliada.

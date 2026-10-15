@@ -114,6 +114,7 @@ pub fn detect_bytes(bytes: &[u8]) -> Kind {
     let head = &bytes[..bytes.len().min(SNIFF_LEN)];
     match from_magic(head).unwrap_or_else(|| from_content(head)) {
         Kind::Text if looks_like_html(head) => Kind::Html,
+        Kind::Text if looks_like_svg(head) => Kind::Svg,
         Kind::Text => sniff_structured(head).unwrap_or(Kind::Text),
         kind => kind,
     }
@@ -130,6 +131,14 @@ fn looks_like_html(head: &[u8]) -> bool {
         .collect::<String>()
         .to_ascii_lowercase();
     start.starts_with("<!doctype html") || start.starts_with("<html")
+}
+
+/// SVG começa (depois de espaços) com `<svg`, ou com `<?xml` e tem `<svg`
+/// na amostra.
+fn looks_like_svg(head: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(head);
+    let start = text.trim_start();
+    start.starts_with("<svg") || (start.starts_with("<?xml") && start.contains("<svg"))
 }
 
 /// Heurística barata, sem parser: JSON começa com `{` ou com `[` seguido de
@@ -497,6 +506,17 @@ mod tests {
         assert_eq!(detect_bytes(b"<!DocType HTML>"), Kind::Html);
         assert_eq!(detect_bytes(b"<p>solto</p>"), Kind::Text);
         assert_eq!(detect_bytes(b"texto <html> no meio"), Kind::Text);
+    }
+
+    #[test]
+    fn stdin_svg_is_detected() {
+        let drawing = std::fs::read(format!("{EXAMPLES}/drawing.svg")).unwrap();
+        assert_eq!(detect_bytes(&drawing), Kind::Svg);
+        assert_eq!(
+            detect_bytes(b"<?xml version=\"1.0\"?>\n<svg></svg>"),
+            Kind::Svg
+        );
+        assert_eq!(detect_bytes(b"<?xml version=\"1.0\"?>\n<doc/>"), Kind::Text);
     }
 
     #[test]

@@ -10,10 +10,10 @@ use crate::convert::{self, Format};
 use crate::detect::Input;
 use crate::html;
 use crate::image;
+use crate::svg;
 use crate::table;
 
-/// Renderizadores escritos em Rust. Os ainda não implementados ficam fora da
-/// resolução (ver `is_implemented`).
+/// Renderizadores escritos em Rust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Internal {
     /// Converte entre json, yaml e toml.
@@ -23,24 +23,17 @@ pub enum Internal {
     },
     /// Imagem direto no terminal (kitty ou meio-bloco), fora do pager.
     Image,
+    /// SVG rasterizado e mostrado como `Image`.
     Svg,
     Html,
     Csv,
 }
 
 impl Internal {
-    /// Enquanto for `false`, a resolução pula o backend.
-    pub const fn is_implemented(self) -> bool {
-        matches!(
-            self,
-            Self::Convert { .. } | Self::Html | Self::Csv | Self::Image
-        )
-    }
-
     /// O renderizador escreve direto no terminal (stdout), sem passar pelo
     /// pager: o chamador imprime o cabeçalho e usa `render_to_terminal`.
     pub const fn writes_to_terminal(self) -> bool {
-        matches!(self, Self::Image)
+        matches!(self, Self::Image | Self::Svg)
     }
 
     /// Descrição curta para o cabeçalho.
@@ -90,8 +83,7 @@ impl Internal {
                 out.write_all(table::render(&bytes, delimiter, width)?.as_bytes())?;
                 Ok(())
             }
-            Self::Image => bail!("imagem escreve direto no terminal, sem pager"),
-            _ => todo!("renderizador interno {self:?}"),
+            Self::Image | Self::Svg => bail!("imagem escreve direto no terminal, sem pager"),
         }
     }
 
@@ -116,6 +108,13 @@ impl Internal {
                     reserved_rows,
                     out,
                 )
+            }
+            Self::Svg => {
+                let bytes = source_bytes(input, content)?;
+                let size = image::TermSize::from_stdout();
+                let (max_w, max_h) = image::screen_box(size, reserved_rows);
+                let img = svg::rasterize(&bytes, max_w, max_h)?;
+                image::render_image(&img, protocol, size, reserved_rows, out)
             }
             _ => bail!("{self:?} não escreve direto no terminal"),
         }
@@ -200,8 +199,8 @@ impl Backend {
     pub fn is_available(&self, path: &OsStr) -> bool {
         match self {
             Self::External { program, .. } => in_path(program, path),
-            Self::Internal(internal) => internal.is_implemented(),
-            Self::Pipe { internal, sink } => internal.is_implemented() && sink.is_available(path),
+            Self::Internal(_) => true,
+            Self::Pipe { sink, .. } => sink.is_available(path),
         }
     }
 
@@ -345,14 +344,6 @@ mod tests {
         let dir = fake_path("noexec", &[]);
         fs::write(dir.join("glow"), "").unwrap();
         assert!(!chain()[0].is_available(dir.as_os_str()));
-    }
-
-    #[test]
-    fn unimplemented_internal_is_skipped() {
-        let dir = fake_path("internal", &["cat"]);
-        let chain = vec![Backend::Internal(Internal::Svg), chain().remove(2)];
-        let res = resolve(&chain, dir.as_os_str()).unwrap();
-        assert!(res.is_fallback());
     }
 
     #[test]

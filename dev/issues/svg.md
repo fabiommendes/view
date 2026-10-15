@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_review
 tags: [svg, image]
 relatedTo: [dev/rfc/mvp.md, dev/issues/image.md]
 kind: enhancement
@@ -28,8 +28,8 @@ creator: claude
 
 ## Plano
 
-- [ ] Dependência `resvg` e rasterização no tamanho do terminal, fundo branco (R1, R2, R3)
-- [ ] `Internal::Svg` escreve direto no terminal, com o cabeçalho de imagem (R1, R6)
-- [ ] SVG inválido cai no `bat -l xml` (R4)
-- [ ] Detecção de SVG no stdin (R5)
-- [ ] Testes, `README.md` e issue em `in_review`
+- [x] Dependência `resvg` e rasterização no tamanho do terminal, fundo branco (R1, R2, R3)
+- [x] `Internal::Svg` escreve direto no terminal, com o cabeçalho de imagem (R1, R6)
+- [x] SVG inválido cai no `bat -l xml` (R4)
+- [x] Detecção de SVG no stdin (R5)
+- [x] Testes, `README.md` e issue em `in_review`

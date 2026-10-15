@@ -821,3 +821,41 @@ mod external_viewers {
         assert!(err.contains("pacman -S poppler"), "{err}");
     }
 }
+
+mod svg {
+    use super::*;
+
+    #[test]
+    fn svg_becomes_half_blocks_from_file_and_stdin() {
+        let from_stdin = view_stdin(&["-v"], &example_bytes("drawing.svg"));
+        for out in [view_example("drawing.svg", &["-v"]), from_stdin] {
+            assert!(out.status.success(), "{out:?}");
+            let text = stdout_of(&out);
+            assert!(text.contains("# imagem: meio-bloco"), "{text}");
+            assert!(text.contains('▀'));
+            // Fundo branco e o retângulo azul `#4a90d9`.
+            assert!(text.contains("255;255;255"));
+            assert!(text.contains("74;144;217"));
+        }
+    }
+
+    #[test]
+    fn svg_fits_the_default_width() {
+        let text = stdout_of(&view_example("drawing.svg", &[]));
+        let widest = text.lines().map(|l| l.matches('▀').count()).max();
+        assert_eq!(widest, Some(80));
+    }
+
+    #[test]
+    fn invalid_svg_is_shown_as_text() {
+        let out = view_stdin(&["-v", "--as", "svg"], b"<svg><rect");
+        assert!(out.status.success(), "{out:?}");
+        let text = stdout_of(&out);
+        assert!(
+            text.contains("# svg inválido: mostrado como texto"),
+            "{text}"
+        );
+        assert!(text.contains("rect"));
+        assert!(!text.contains('▀'));
+    }
+}
