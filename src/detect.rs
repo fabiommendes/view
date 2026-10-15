@@ -111,6 +111,62 @@ pub fn detect(input: &Input) -> Kind {
     }
 }
 
+/// Detecta o tipo do conteúdo lido do stdin: magic bytes e, depois, texto ou
+/// binário. Não há nome, então a extensão não participa; o `bat` também não
+/// tem o que usar para escolher a sintaxe, então um texto que parece JSON ou
+/// TOML vira `Json` ou `Toml`.
+pub fn detect_bytes(bytes: &[u8]) -> Kind {
+    let head = &bytes[..bytes.len().min(SNIFF_LEN)];
+    match from_magic(head).unwrap_or_else(|| from_content(head)) {
+        Kind::Text => sniff_structured(head).unwrap_or(Kind::Text),
+        kind => kind,
+    }
+}
+
+/// Heurística barata, sem parser: JSON começa com `{` ou com `[` seguido de
+/// um valor; TOML começa com um cabeçalho `[tabela]` ou tem só linhas
+/// `chave = valor`, cabeçalhos e comentários.
+fn sniff_structured(head: &[u8]) -> Option<Kind> {
+    let text = String::from_utf8_lossy(head);
+    let trimmed = text.trim_start();
+    let mut chars = trimmed.chars();
+    match chars.next()? {
+        '{' => return Some(Kind::Json),
+        '[' => {
+            let next = chars.find(|c| !c.is_whitespace())?;
+            if matches!(next, '"' | '{' | '[' | '-' | ']') || next.is_ascii_digit() {
+                return Some(Kind::Json);
+            }
+        }
+        _ => {}
+    }
+    let mut lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'));
+    let first = lines.next()?;
+    let is_header = |l: &str| {
+        let name = l.trim_start_matches('[').trim_end_matches(']');
+        l.starts_with('[')
+            && l.ends_with(']')
+            && !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "_-. \"'".contains(c))
+    };
+    let is_pair = |l: &str| {
+        l.split_once('=').is_some_and(|(key, _)| {
+            let key = key.trim();
+            !key.is_empty()
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-.\"'".contains(c))
+        })
+    };
+    let toml = is_header(first) || (is_pair(first) && lines.all(|l| is_header(l) || is_pair(l)));
+    toml.then_some(Kind::Toml)
+}
+
 /// Detecção de um arquivo. Um arquivo ilegível ou inexistente só tem a
 /// extensão para decidir e, sem ela, vira `Text`.
 fn detect_file(path: &Path) -> Kind {
@@ -373,6 +429,49 @@ mod tests {
     fn directory_is_detected() {
         let input = Input::Target(env!("CARGO_MANIFEST_DIR").into());
         assert_eq!(detect(&input), Kind::Directory);
+    }
+
+    #[test]
+    fn bytes_use_magic_then_content() {
+        let png = std::fs::read(format!("{EXAMPLES}/image.png")).unwrap();
+        assert_eq!(detect_bytes(&png), Kind::Image);
+        assert_eq!(detect_bytes(&elf_head()), Kind::Binary);
+        assert_eq!(detect_bytes("# olá\n".as_bytes()), Kind::Text);
+        assert_eq!(detect_bytes(b"\x01\0\x02"), Kind::Binary);
+        assert_eq!(detect_bytes(b""), Kind::Text);
+    }
+
+    #[test]
+    fn text_bytes_that_look_structured_are_sniffed() {
+        let toml = std::fs::read(format!("{EXAMPLES}/config.toml")).unwrap();
+        assert_eq!(detect_bytes(&toml), Kind::Toml);
+        assert_eq!(detect_bytes(b"[package]\nname = \"a\"\n"), Kind::Toml);
+        assert_eq!(detect_bytes(b"# c\na = 1\nb = \"x\"\n"), Kind::Toml);
+        let json = std::fs::read(format!("{EXAMPLES}/data.json")).unwrap();
+        assert_eq!(detect_bytes(&json), Kind::Json);
+        assert_eq!(detect_bytes(b"  [1, 2]\n"), Kind::Json);
+        assert_eq!(detect_bytes(b"[\"a\"]"), Kind::Json);
+    }
+
+    #[test]
+    fn plain_text_and_code_are_not_sniffed_as_structured() {
+        assert_eq!(detect_bytes(b"x = 1\nprint(x)\n"), Kind::Text);
+        assert_eq!(detect_bytes(b"[um link](http://a)\n"), Kind::Text);
+        assert_eq!(detect_bytes(b"[ok] feito\n"), Kind::Text);
+        let yaml = std::fs::read(format!("{EXAMPLES}/config.yaml")).unwrap();
+        assert_eq!(detect_bytes(&yaml), Kind::Text);
+        assert_eq!(detect_bytes(&example_bytes_text("code.py")), Kind::Text);
+    }
+
+    fn example_bytes_text(name: &str) -> Vec<u8> {
+        std::fs::read(format!("{EXAMPLES}/{name}")).unwrap()
+    }
+
+    #[test]
+    fn bytes_inspect_only_the_first_8_kib() {
+        let mut bytes = vec![b'a'; SNIFF_LEN];
+        bytes.push(0);
+        assert_eq!(detect_bytes(&bytes), Kind::Text);
     }
 
     #[test]
