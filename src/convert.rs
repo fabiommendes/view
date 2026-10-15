@@ -70,8 +70,29 @@ fn parse(text: &str, format: Format) -> Result<Value> {
     Ok(match format {
         Format::Json => serde_json::from_str(text)?,
         Format::Yaml => serde_saphyr::from_str(text)?,
-        Format::Toml => toml::from_str(text)?,
+        Format::Toml => toml_to_json(toml::from_str(text)?),
     })
+}
+
+/// Datas e horas do TOML viram strings com o texto original. Não passamos
+/// por `serde_json::to_value`, porque o `Serialize` de `toml::Datetime` emite
+/// um mapa de uso interno do crate (`$__toml_private_datetime`).
+fn toml_to_json(value: toml::Value) -> Value {
+    match value {
+        toml::Value::String(s) => Value::String(s),
+        toml::Value::Integer(i) => Value::from(i),
+        // NaN e infinito não existem em JSON; viram null, como o serde_json faz.
+        toml::Value::Float(f) => serde_json::Number::from_f64(f).map_or(Value::Null, Value::Number),
+        toml::Value::Boolean(b) => Value::Bool(b),
+        toml::Value::Datetime(d) => Value::String(d.to_string()),
+        toml::Value::Array(items) => Value::Array(items.into_iter().map(toml_to_json).collect()),
+        toml::Value::Table(table) => Value::Object(
+            table
+                .into_iter()
+                .map(|(key, value)| (key, toml_to_json(value)))
+                .collect(),
+        ),
+    }
 }
 
 fn serialize(value: &Value, format: Format) -> Result<String> {
@@ -150,6 +171,35 @@ mod tests {
         let err = convert(DATA, Format::Json, Format::Toml).unwrap_err();
         let msg = format!("{err:#}");
         assert!(msg.contains("json para toml"), "{msg}");
+    }
+
+    #[test]
+    fn toml_datetimes_become_plain_strings_in_json_and_yaml() {
+        let text = concat!(
+            "offset = 2026-10-15T10:00:00Z\n",
+            "local_date = 1979-05-27\n",
+            "local_time = 07:32:00\n",
+            "list = [1979-05-27, 07:32:00]\n",
+            "[nested.deeper]\n",
+            "when = 1979-05-27T07:32:00-03:00\n",
+            "[[events]]\n",
+            "at = 2026-10-15T10:00:00Z\n",
+        );
+        let expected = serde_json::json!({
+            "offset": "2026-10-15T10:00:00Z",
+            "local_date": "1979-05-27",
+            "local_time": "07:32:00",
+            "list": ["1979-05-27", "07:32:00"],
+            "nested": {"deeper": {"when": "1979-05-27T07:32:00-03:00"}},
+            "events": [{"at": "2026-10-15T10:00:00Z"}],
+        });
+        let json = convert(text, Format::Toml, Format::Json).unwrap();
+        assert_eq!(value(&json, Format::Json), expected);
+        assert!(!json.contains("$__toml_private"), "{json}");
+
+        let yaml = convert(text, Format::Toml, Format::Yaml).unwrap();
+        assert_eq!(value(&yaml, Format::Yaml), expected);
+        assert!(!yaml.contains("$__toml_private"), "{yaml}");
     }
 
     #[test]
