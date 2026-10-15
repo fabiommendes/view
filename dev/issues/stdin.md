@@ -1,11 +1,12 @@
 ---
 type: issue
-status: in_review
+status: completed
 tags: [detect, cli]
 relatedTo: [dev/rfc/mvp.md, dev/issues/detect-magic-bytes.md]
 kind: enhancement
 created: 2026-10-15
 creator: claude
+closed: 2026-10-15
 ---
 
 # Leitura de stdin
