@@ -11,7 +11,7 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 
 ## O que é
 
-`view` é uma CLI em Rust que roteia um arquivo, URL ou stdin para o visualizador certo e mostra o resultado num pager (`less -RF`). Cada formato tem uma cadeia ordenada de backends; vence o primeiro disponível. O primeiro conteúdo paginado é um cabeçalho com o comando equivalente.
+`view` é uma CLI em Rust que roteia um arquivo, URL ou stdin para o visualizador certo e mostra o resultado num pager (`less -RF`). Cada formato tem uma cadeia ordenada de backends; vence o primeiro disponível. Com `-v`, o primeiro conteúdo paginado é um cabeçalho com o comando equivalente; sem ele, só o conteúdo.
 
 ## Comandos
 

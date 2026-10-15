@@ -32,9 +32,9 @@ struct Cli {
     /// Arquivo, diretório ou URL. Ausente ou `-` lê o stdin.
     target: Option<String>,
 
-    /// Não imprime o cabeçalho (comando equivalente e régua).
+    /// Imprime o cabeçalho (comando equivalente, notas e régua).
     #[arg(short, long)]
-    quiet: bool,
+    verbose: bool,
 
     /// Só imprime o comando que rodaria.
     #[arg(short = 'n', long)]
@@ -137,9 +137,7 @@ fn run(cli: &Cli) -> Result<()> {
 
     let stdout = std::io::stdout();
     let image_protocol = image::Protocol::detect(stdout.is_terminal());
-    let header = if cli.quiet {
-        String::new()
-    } else {
+    let header = if cli.verbose {
         let mut notes: Vec<String> = resolution
             .is_fallback()
             .then(|| header::install_hint(&resolution))
@@ -150,6 +148,8 @@ fn run(cli: &Cli) -> Result<()> {
             notes.push(format!("# imagem: {}", image_protocol.name()));
         }
         header::render(&command, &notes, usize::from(width))
+    } else {
+        String::new()
     };
 
     let pager = pager::select(cli.no_pager, stdout.is_terminal());

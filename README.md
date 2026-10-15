@@ -28,7 +28,7 @@ final, e o cabeçalho mostra o caminho dele.
 
 | Opção | Efeito |
 | :-- | :-- |
-| `-q`, `--quiet` | sem cabeçalho |
+| `-v`, `--verbose` | mostra o cabeçalho (comando equivalente, notas e régua); sem ele, só o conteúdo |
 | `-n`, `--dry-run` | só imprime o comando que rodaria |
 | `--as <FORMAT>` | força o formato (`code`, `md`, `json`, `yaml`, `dir`, `binary`...); entre `json`, `yaml` e `toml` converte |
 | `--no-pager` | escreve direto no stdout |
@@ -61,8 +61,8 @@ A detecção usa diretório, prefixo `http(s)://`, magic bytes, extensão e, por
 ## Imagens
 
 png, jpeg, gif (primeiro quadro) e webp, de arquivo, stdin ou URL. Imagens não
-passam pelo pager e `--no-pager` não muda nada: o cabeçalho e a imagem saem
-direto no stdout. O cabeçalho ganha `# imagem: kitty` ou `# imagem: meio-bloco`.
+passam pelo pager e `--no-pager` não muda nada: a imagem (e o cabeçalho, com
+`-v`) sai direto no stdout. Com `-v`, o cabeçalho ganha `# imagem: kitty` ou `# imagem: meio-bloco`.
 
 - kitty: com `TERM=xterm-kitty`, `KITTY_WINDOW_ID` ou `TERM_PROGRAM=ghostty` e
   stdout num terminal. Transmite o PNG com `a=T`.
@@ -78,7 +78,7 @@ limite de 20 MiB, timeout de 15 s, redirecionamentos seguidos. O tipo vem do
 `Content-Type`; se ele falta ou é genérico (`text/plain`,
 `application/octet-stream`, desconhecido), vale a detecção pelo conteúdo, como
 no stdin. Depois o conteúdo segue o caminho do stdin (pipe ou arquivo
-temporário). O cabeçalho mostra o equivalente:
+temporário). Com `-v`, o cabeçalho mostra o equivalente:
 
 ```
 $ curl -sL https://exemplo.com/dados.json | bat --color=always --paging=never --style=plain -l json -

@@ -126,7 +126,7 @@ fn strip_ansi(text: &str) -> String {
 
 #[test]
 fn html_is_rendered_as_markdown() {
-    let out = fetch("/page.html", &["-q"]);
+    let out = fetch("/page.html", &[]);
     assert!(out.status.success(), "{out:?}");
     let text = strip_ansi(&stdout_of(&out));
     assert!(text.contains("Bem-vindo"), "{text}");
@@ -137,7 +137,7 @@ fn html_is_rendered_as_markdown() {
 
 #[test]
 fn json_is_highlighted() {
-    let out = fetch("/data.json", &["-q"]);
+    let out = fetch("/data.json", &[]);
     assert!(out.status.success(), "{out:?}");
     let text = strip_ansi(&stdout_of(&out));
     assert!(text.contains("\"projeto\""), "{text}");
@@ -146,36 +146,36 @@ fn json_is_highlighted() {
 #[test]
 fn image_is_routed_to_the_image_chain() {
     // O tipo veio do `Content-Type`; com stdout num pipe, sai meio-bloco.
-    let out = fetch("/image.png", &["-q"]);
+    let out = fetch("/image.png", &[]);
     assert!(out.status.success(), "{out:?}");
     assert!(stdout_of(&out).contains('▀'));
 }
 
 #[test]
 fn missing_or_generic_content_type_falls_back_to_the_content() {
-    let html = fetch("/untyped-html", &["-q"]);
+    let html = fetch("/untyped-html", &[]);
     assert!(html.status.success(), "{html:?}");
     assert!(strip_ansi(&stdout_of(&html)).contains("Bem-vindo"));
 
-    let json = fetch("/plain-json", &["-q"]);
+    let json = fetch("/plain-json", &[]);
     assert!(json.status.success(), "{json:?}");
     assert!(strip_ansi(&stdout_of(&json)).contains("\"projeto\""));
 
-    let png = fetch("/octet-png", &["-q"]);
+    let png = fetch("/octet-png", &[]);
     assert!(png.status.success(), "{png:?}");
     assert!(stdout_of(&png).contains('▀'));
 }
 
 #[test]
 fn redirects_are_followed() {
-    let out = fetch("/redirect", &["-q"]);
+    let out = fetch("/redirect", &[]);
     assert!(out.status.success(), "{out:?}");
     assert!(strip_ansi(&stdout_of(&out)).contains("Bem-vindo"));
 }
 
 #[test]
 fn header_shows_curl_piped_into_the_backend() {
-    let out = fetch("/data.json", &[]);
+    let out = fetch("/data.json", &["-v"]);
     assert!(out.status.success(), "{out:?}");
     let text = stdout_of(&out);
     let first = text.lines().next().unwrap();
@@ -187,7 +187,7 @@ fn header_shows_curl_piped_into_the_backend() {
 
 #[test]
 fn http_error_is_a_short_message_with_the_status() {
-    let out = fetch("/nope", &["-q"]);
+    let out = fetch("/nope", &[]);
     assert!(!out.status.success());
     assert!(stdout_of(&out).is_empty());
     let err = stderr_of(&out);
@@ -241,7 +241,7 @@ fn dry_run_example_com_is_offline() {
 
 #[test]
 fn csv_content_type_is_rendered_as_a_table() {
-    let out = fetch("/table", &["-q"]);
+    let out = fetch("/table", &[]);
     assert!(out.status.success());
     let text = stdout_of(&out);
     assert!(

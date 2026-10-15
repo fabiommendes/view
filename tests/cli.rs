@@ -7,8 +7,8 @@ fn view() -> Command {
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixture.txt");
 
 #[test]
-fn quiet_no_pager_prints_only_content() {
-    let out = view().args(["--no-pager", "-q", FIXTURE]).output().unwrap();
+fn default_prints_only_content() {
+    let out = view().args(["--no-pager", FIXTURE]).output().unwrap();
     assert!(out.status.success());
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("um texto"));
@@ -17,8 +17,8 @@ fn quiet_no_pager_prints_only_content() {
 }
 
 #[test]
-fn header_shows_command_and_ruler() {
-    let out = view().args(["--no-pager", FIXTURE]).output().unwrap();
+fn verbose_header_shows_command_and_ruler() {
+    let out = view().args(["--no-pager", "-v", FIXTURE]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.starts_with("\x1b[2m$ "));
     assert!(text.contains('─'));
@@ -93,7 +93,7 @@ fn view_example(example: &str, args: &[&str]) -> std::process::Output {
 fn image_files_become_half_blocks_when_stdout_is_a_pipe() {
     // Mesmo com um terminal kitty anunciado no ambiente: pipe não é terminal.
     for name in ["image.png", "photo.jpg", "image-as.txt"] {
-        let out = view_example(name, &["-q"]);
+        let out = view_example(name, &[]);
         assert!(out.status.success(), "{name}: {out:?}");
         let text = stdout_of(&out);
         assert!(text.contains("\x1b[38;2;"), "{name}");
@@ -104,7 +104,7 @@ fn image_files_become_half_blocks_when_stdout_is_a_pipe() {
 
 #[test]
 fn image_header_names_the_protocol_before_the_image() {
-    let text = stdout_of(&view_example("image.png", &[]));
+    let text = stdout_of(&view_example("image.png", &["-v"]));
     let note = text
         .find("# imagem: meio-bloco")
         .expect("nota no cabeçalho");
@@ -113,14 +113,14 @@ fn image_header_names_the_protocol_before_the_image() {
 
 #[test]
 fn image_ignores_no_pager() {
-    let with = view_example("image.png", &["-q", "--no-pager"]);
-    let without = view_example("image.png", &["-q"]);
+    let with = view_example("image.png", &["--no-pager"]);
+    let without = view_example("image.png", &[]);
     assert_eq!(with.stdout, without.stdout);
 }
 
 #[test]
 fn image_fits_the_default_width() {
-    let text = stdout_of(&view_example("photo.jpg", &["-q"]));
+    let text = stdout_of(&view_example("photo.jpg", &[]));
     for line in text.lines() {
         assert!(line.matches('▀').count() <= 80, "{line}");
     }
@@ -128,7 +128,7 @@ fn image_fits_the_default_width() {
 
 #[test]
 fn image_that_cannot_be_decoded_fails() {
-    let out = view_example("notes.txt", &["--as", "image", "-q"]);
+    let out = view_example("notes.txt", &["--as", "image"]);
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("decodificar"));
 }
@@ -190,7 +190,7 @@ fn example_bytes(name: &str) -> Vec<u8> {
 
 #[test]
 fn stdin_text_is_viewed_with_bat_or_cat() {
-    let out = view_stdin(&["--no-pager", "-q"], &example_bytes("notes.txt"));
+    let out = view_stdin(&["--no-pager"], &example_bytes("notes.txt"));
     assert!(
         out.status.success(),
         "{}",
@@ -227,10 +227,7 @@ fn stdin_markdown_with_as_shows_glow() {
 
 #[test]
 fn stdin_markdown_is_rendered() {
-    let out = view_stdin(
-        &["--as", "md", "--no-pager", "-q"],
-        &example_bytes("readme.md"),
-    );
+    let out = view_stdin(&["--as", "md", "--no-pager"], &example_bytes("readme.md"));
     assert!(
         out.status.success(),
         "{}",
@@ -242,7 +239,7 @@ fn stdin_markdown_is_rendered() {
 #[test]
 fn stdin_json_is_detected_as_text_and_viewed() {
     let json = example_bytes("data.json");
-    let out = view_stdin(&["--no-pager", "-q"], &json);
+    let out = view_stdin(&["--no-pager"], &json);
     assert!(out.status.success());
     let text = stdout_of(&out);
     assert!(text.contains("descricao"), "{text}");
@@ -253,7 +250,7 @@ fn stdin_binary_is_a_hexdump() {
     let bytes = example_bytes("binary.bin");
     let dry = stdout_of(&view_stdin(&["-n"], &bytes));
     assert!(dry.contains("hexyl") || dry.contains("xxd"), "{dry}");
-    let out = view_stdin(&["--no-pager", "-q"], &bytes);
+    let out = view_stdin(&["--no-pager"], &bytes);
     assert!(
         out.status.success(),
         "{}",
@@ -266,7 +263,7 @@ fn stdin_binary_is_a_hexdump() {
 fn stdin_image_is_detected_by_magic_bytes() {
     let out = view_stdin(&["-n"], &example_bytes("image.png"));
     assert!(stdout_of(&out).contains("imagem"), "{out:?}");
-    let out = view_stdin(&["-q"], &example_bytes("image.png"));
+    let out = view_stdin(&[], &example_bytes("image.png"));
     assert!(out.status.success(), "{out:?}");
     assert!(stdout_of(&out).contains('▀'));
 }
@@ -304,7 +301,7 @@ fn stdin_dry_run_with_path_only_backend_shows_temp_path_without_creating_it() {
 
 #[test]
 fn stdin_toml_gets_highlighted() {
-    let out = view_stdin(&["--no-pager", "-q"], &example_bytes("config.toml"));
+    let out = view_stdin(&["--no-pager"], &example_bytes("config.toml"));
     assert!(out.status.success());
     let dry = stdout_of(&view_stdin(&["-n"], &example_bytes("config.toml")));
     if dry.starts_with("$ bat ") {
@@ -322,7 +319,6 @@ mod structured {
         view()
             .args([
                 "--no-pager",
-                "-q",
                 "--as",
                 format,
                 &format!("{EXAMPLES}/{example}"),
@@ -332,7 +328,7 @@ mod structured {
     }
 
     fn run_stdin(format: &str, content: &[u8]) -> Output {
-        run_stdin_args(&["--no-pager", "-q", "--as", format], content)
+        run_stdin_args(&["--no-pager", "--as", format], content)
     }
 
     fn run_stdin_args(args: &[&str], content: &[u8]) -> Output {
@@ -437,7 +433,7 @@ mod structured {
 
     #[test]
     fn invalid_source_fails_with_a_clear_error() {
-        let out = run_stdin_args(&["--no-pager", "-q", "--as", "yaml"], b"{\"a\": ");
+        let out = run_stdin_args(&["--no-pager", "--as", "yaml"], b"{\"a\": ");
         assert!(!out.status.success());
         let err = String::from_utf8_lossy(&out.stderr);
         assert!(err.contains("view: "), "{err}");
@@ -449,7 +445,7 @@ mod structured {
         let raw = example("data.json");
         for args in [vec!["--as", "json"], vec![]] {
             let out = view()
-                .args(["--no-pager", "-q"])
+                .args(["--no-pager"])
                 .args(&args)
                 .arg(format!("{EXAMPLES}/data.json"))
                 .output()
@@ -534,7 +530,7 @@ mod html {
 
     #[test]
     fn file_renders_as_markdown() {
-        let out = run(&["--no-pager", "-q", PAGE], None);
+        let out = run(&["--no-pager", PAGE], None);
         assert!(out.status.success(), "{out:?}");
         assert_markdown_of_page(&stdout_of(&out));
     }
@@ -542,7 +538,7 @@ mod html {
     #[test]
     fn stdin_is_detected_as_html() {
         let page = std::fs::read(PAGE).unwrap();
-        let out = run(&["--no-pager", "-q"], Some(&page));
+        let out = run(&["--no-pager"], Some(&page));
         assert!(out.status.success(), "{out:?}");
         assert_markdown_of_page(&stdout_of(&out));
     }
@@ -566,7 +562,7 @@ mod csv {
     /// Saída de `view --no-pager -q` sobre um exemplo.
     fn table_of(example: &str) -> String {
         let out = view()
-            .args(["--no-pager", "-q", &format!("{EXAMPLES}/{example}")])
+            .args(["--no-pager", &format!("{EXAMPLES}/{example}")])
             .output()
             .unwrap();
         assert!(out.status.success());
@@ -605,21 +601,15 @@ mod csv {
 
     #[test]
     fn stdin_is_not_guessed_as_csv_without_as() {
-        let out = view_stdin(&["--no-pager", "-q"], &example_bytes("table.csv"));
+        let out = view_stdin(&["--no-pager"], &example_bytes("table.csv"));
         assert!(!stdout_of(&out).contains('┌'));
     }
 
     #[test]
     fn stdin_with_as_csv_or_tsv_is_a_table() {
-        let out = view_stdin(
-            &["--no-pager", "-q", "--as", "csv"],
-            &example_bytes("table.csv"),
-        );
+        let out = view_stdin(&["--no-pager", "--as", "csv"], &example_bytes("table.csv"));
         assert!(stdout_of(&out).contains("Belo Horizonte, MG"));
-        let out = view_stdin(
-            &["--no-pager", "-q", "--as", "csv"],
-            &example_bytes("table.tsv"),
-        );
+        let out = view_stdin(&["--no-pager", "--as", "csv"], &example_bytes("table.tsv"));
         let text = stdout_of(&out);
         assert!(
             text.contains("Porto Alegre") && !text.contains('\t'),
@@ -630,7 +620,7 @@ mod csv {
     #[test]
     fn table_fits_the_terminal_width() {
         let long = format!("a,b\n{},{}\n", "x".repeat(200), "y".repeat(200));
-        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], long.as_bytes());
+        let out = view_stdin(&["--no-pager", "--as", "csv"], long.as_bytes());
         for line in stdout_of(&out).lines() {
             assert!(line.chars().count() <= 80, "{line}");
         }
@@ -642,7 +632,7 @@ mod csv {
         for i in 0..10_005 {
             data.push_str(&format!("linha{i}\n"));
         }
-        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], data.as_bytes());
+        let out = view_stdin(&["--no-pager", "--as", "csv"], data.as_bytes());
         let text = stdout_of(&out);
         assert!(text.contains("linha9999 "), "fim das 10000 linhas");
         assert!(!text.contains("linha10000"));
@@ -659,7 +649,7 @@ mod csv {
         for i in 0..10_000 {
             data.push_str(&format!("{i}\n"));
         }
-        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], data.as_bytes());
+        let out = view_stdin(&["--no-pager", "--as", "csv"], data.as_bytes());
         assert!(!stdout_of(&out).contains("omitidas"));
     }
 }
