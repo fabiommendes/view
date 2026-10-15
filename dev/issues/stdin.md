@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_progress
 tags: [detect, cli]
 relatedTo: [dev/rfc/mvp.md, dev/issues/detect-magic-bytes.md]
 kind: enhancement
