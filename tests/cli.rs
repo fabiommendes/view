@@ -71,16 +71,66 @@ fn dry_run_binary_bin_is_hexdump() {
 
 #[test]
 fn dry_run_png_renamed_to_txt_is_not_text() {
-    // Imagem ainda não tem backend: o `view` falha em vez de cair no `bat`.
     let out = dry_run("image-as.txt");
     let text = stdout_of(&out);
+    assert!(out.status.success(), "{out:?}");
     assert!(!text.contains("bat"), "{text}");
+    assert!(text.contains("imagem"), "{text}");
+}
+
+/// Roda `view` sobre um exemplo com o stdout num pipe (sem terminal).
+fn view_example(example: &str, args: &[&str]) -> std::process::Output {
+    view()
+        .args(args)
+        .arg(format!("{EXAMPLES}/{example}"))
+        .env_remove("KITTY_WINDOW_ID")
+        .env("TERM_PROGRAM", "ghostty")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn image_files_become_half_blocks_when_stdout_is_a_pipe() {
+    // Mesmo com um terminal kitty anunciado no ambiente: pipe não é terminal.
+    for name in ["image.png", "photo.jpg", "image-as.txt"] {
+        let out = view_example(name, &["-q"]);
+        assert!(out.status.success(), "{name}: {out:?}");
+        let text = stdout_of(&out);
+        assert!(text.contains("\x1b[38;2;"), "{name}");
+        assert!(text.contains('▀'), "{name}");
+        assert!(!text.contains("\x1b_G"), "{name}");
+    }
+}
+
+#[test]
+fn image_header_names_the_protocol_before_the_image() {
+    let text = stdout_of(&view_example("image.png", &[]));
+    let note = text
+        .find("# imagem: meio-bloco")
+        .expect("nota no cabeçalho");
+    assert!(note < text.find('▀').unwrap());
+}
+
+#[test]
+fn image_ignores_no_pager() {
+    let with = view_example("image.png", &["-q", "--no-pager"]);
+    let without = view_example("image.png", &["-q"]);
+    assert_eq!(with.stdout, without.stdout);
+}
+
+#[test]
+fn image_fits_the_default_width() {
+    let text = stdout_of(&view_example("photo.jpg", &["-q"]));
+    for line in text.lines() {
+        assert!(line.matches('▀').count() <= 80, "{line}");
+    }
+}
+
+#[test]
+fn image_that_cannot_be_decoded_fails() {
+    let out = view_example("notes.txt", &["--as", "image", "-q"]);
     assert!(!out.status.success());
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        err.contains("nenhum visualizador disponível para image"),
-        "{err}"
-    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("decodificar"));
 }
 
 #[test]
@@ -215,11 +265,10 @@ fn stdin_binary_is_a_hexdump() {
 #[test]
 fn stdin_image_is_detected_by_magic_bytes() {
     let out = view_stdin(&["-n"], &example_bytes("image.png"));
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        err.contains("nenhum visualizador disponível para image"),
-        "{err}"
-    );
+    assert!(stdout_of(&out).contains("imagem"), "{out:?}");
+    let out = view_stdin(&["-q"], &example_bytes("image.png"));
+    assert!(out.status.success(), "{out:?}");
+    assert!(stdout_of(&out).contains('▀'));
 }
 
 #[test]

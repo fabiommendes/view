@@ -145,14 +145,10 @@ fn json_is_highlighted() {
 
 #[test]
 fn image_is_routed_to_the_image_chain() {
-    // Imagem ainda não tem backend, mas o tipo veio do `Content-Type`.
+    // O tipo veio do `Content-Type`; com stdout num pipe, sai meio-bloco.
     let out = fetch("/image.png", &["-q"]);
-    assert!(!out.status.success());
-    let err = stderr_of(&out);
-    assert!(
-        err.contains("nenhum visualizador disponível para image"),
-        "{err}"
-    );
+    assert!(out.status.success(), "{out:?}");
+    assert!(stdout_of(&out).contains('▀'));
 }
 
 #[test]
@@ -166,7 +162,8 @@ fn missing_or_generic_content_type_falls_back_to_the_content() {
     assert!(strip_ansi(&stdout_of(&json)).contains("\"projeto\""));
 
     let png = fetch("/octet-png", &["-q"]);
-    assert!(stderr_of(&png).contains("para image"), "{png:?}");
+    assert!(png.status.success(), "{png:?}");
+    assert!(stdout_of(&png).contains('▀'));
 }
 
 #[test]

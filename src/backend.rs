@@ -4,11 +4,12 @@ use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 
 use crate::convert::{self, Format};
 use crate::detect::Input;
 use crate::html;
+use crate::image;
 use crate::table;
 
 /// Renderizadores escritos em Rust. Os ainda não implementados ficam fora da
@@ -20,7 +21,7 @@ pub enum Internal {
         from: Format,
         to: Format,
     },
-    /// Imagem interna (o spike em `examples/kitty_placeholder.rs` explora placeholders Unicode do kitty).
+    /// Imagem direto no terminal (kitty ou meio-bloco), fora do pager.
     Image,
     Svg,
     Html,
@@ -33,7 +34,16 @@ pub enum Internal {
 impl Internal {
     /// Enquanto for `false`, a resolução pula o backend.
     pub const fn is_implemented(self) -> bool {
-        matches!(self, Self::Convert { .. } | Self::Html | Self::Csv)
+        matches!(
+            self,
+            Self::Convert { .. } | Self::Html | Self::Csv | Self::Image
+        )
+    }
+
+    /// O renderizador escreve direto no terminal (stdout), sem passar pelo
+    /// pager: o chamador imprime o cabeçalho e usa `render_to_terminal`.
+    pub const fn writes_to_terminal(self) -> bool {
+        matches!(self, Self::Image)
     }
 
     /// Descrição curta para o cabeçalho.
@@ -86,7 +96,34 @@ impl Internal {
                 out.write_all(table::render(&bytes, delimiter, width)?.as_bytes())?;
                 Ok(())
             }
+            Self::Image => bail!("imagem escreve direto no terminal, sem pager"),
             _ => todo!("renderizador interno {self:?}"),
+        }
+    }
+
+    /// Escreve a renderização de `input` direto no terminal. Só vale para
+    /// `writes_to_terminal`. `reserved_rows` são as linhas já ocupadas pelo
+    /// cabeçalho; `protocol` é o protocolo anunciado nele.
+    pub fn render_to_terminal(
+        self,
+        input: &Input,
+        content: &[u8],
+        protocol: image::Protocol,
+        reserved_rows: u32,
+        out: &mut dyn std::io::Write,
+    ) -> anyhow::Result<()> {
+        match self {
+            Self::Image => {
+                let bytes = source_bytes(input, content)?;
+                image::render(
+                    &bytes,
+                    protocol,
+                    image::TermSize::from_stdout(),
+                    reserved_rows,
+                    out,
+                )
+            }
+            _ => bail!("{self:?} não escreve direto no terminal"),
         }
     }
 }
@@ -282,7 +319,7 @@ mod tests {
     #[test]
     fn unimplemented_internal_is_skipped() {
         let dir = fake_path("internal", &["cat"]);
-        let chain = vec![Backend::Internal(Internal::Image), chain().remove(2)];
+        let chain = vec![Backend::Internal(Internal::Pdf), chain().remove(2)];
         let res = resolve(&chain, dir.as_os_str()).unwrap();
         assert!(res.is_fallback());
     }

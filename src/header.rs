@@ -100,11 +100,12 @@ pub fn install_hint(resolution: &Resolution<'_>) -> Option<String> {
     })
 }
 
-/// Monta o cabeçalho completo, esmaecido, terminado em newline.
-pub fn render(command: &str, hint: Option<&str>, width: usize) -> String {
+/// Monta o cabeçalho completo, esmaecido, terminado em newline. Cada nota
+/// ocupa uma linha entre o comando e a régua.
+pub fn render(command: &str, notes: &[String], width: usize) -> String {
     let mut out = format!("{DIM}{command}{RESET}\n");
-    if let Some(hint) = hint {
-        out.push_str(&format!("{DIM}{hint}{RESET}\n"));
+    for note in notes {
+        out.push_str(&format!("{DIM}{note}{RESET}\n"));
     }
     out.push_str(&format!("{DIM}{}{RESET}\n", "─".repeat(width)));
     out
@@ -128,13 +129,17 @@ mod tests {
 
     #[test]
     fn render_has_command_ruler_and_dim() {
-        let out = render("$ cat a", None, 5);
+        let out = render("$ cat a", &[], 5);
         assert_eq!(out, "\x1b[2m$ cat a\x1b[0m\n\x1b[2m─────\x1b[0m\n");
     }
 
     #[test]
     fn render_places_hint_between_command_and_ruler() {
-        let out = render("$ bat a", Some("# glow não encontrado: pacman -S glow"), 3);
+        let out = render(
+            "$ bat a",
+            &["# glow não encontrado: pacman -S glow".to_owned()],
+            3,
+        );
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.len(), 3);
         assert!(lines[1].contains("glow não encontrado: pacman -S glow"));

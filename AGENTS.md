@@ -17,7 +17,7 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 
 - checagem (define "pronto"): `just check` (`cargo fmt --check`, `cargo clippy --all-targets -D warnings`, `cargo test`)
 - execução local: `cargo run -- [OPTIONS] [TARGET]`
-- spike de imagem: `cargo run --example kitty_placeholder -- foto.png | less -RF`
+- imagem no terminal: `cargo run -- tests/examples/photo.jpg` (o `view` não usa pager para imagens)
 
 ## Mapa
 
@@ -27,12 +27,13 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 - `src/route.rs`: tabela `Kind` → cadeia de backends.
 - `src/header.rs`: linha do comando, dica de instalação e régua.
 - `src/pager.rs`: trait `Pager`, pager externo e escrita direta.
-- `examples/kitty_placeholder/`: spike de imagem com placeholders Unicode do kitty.
+- `src/image.rs`: imagens direto no terminal (kitty `a=T` ou meio-bloco), tamanho via `TIOCGWINSZ`.
 - `dev/`: `issues/`, `adr/` e `notes/`, conforme o ADR 0003 do tooling-root.
 
 ## Regras
 
 - Backends externos escrevem com cor num pipe que alimenta o nosso pager; nunca ative o pager deles.
+- Imagem não passa pelo pager: `Internal::writes_to_terminal` marca renderizadores que escrevem direto no stdout, depois do cabeçalho. Veja `dev/notes/kitty-placeholders.md`.
 - Renderizadores internos (`backend::Internal`) ficam fora da resolução enquanto `is_implemented` for `false`. Ao implementar um, troque o `todo!()` e o `is_implemented`.
 - Toda cadeia nova em `route.rs` vem com teste e entra na tabela do `README.md`.
 - Sem crates novos sem necessidade clara.

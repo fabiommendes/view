@@ -6,6 +6,7 @@ mod detect;
 mod fetch;
 mod header;
 mod html;
+mod image;
 mod pager;
 mod route;
 mod stdin;
@@ -18,7 +19,7 @@ use std::process::{Command, ExitCode, Stdio};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{CommandFactory, Parser};
 
-use crate::backend::Backend;
+use crate::backend::{Backend, Internal};
 use crate::convert::Format;
 use crate::detect::{Input, Kind};
 
@@ -134,22 +135,29 @@ fn run(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
+    let stdout = std::io::stdout();
+    let image_protocol = image::Protocol::detect(stdout.is_terminal());
     let header = if cli.quiet {
         String::new()
     } else {
-        let hint = resolution
+        let mut notes: Vec<String> = resolution
             .is_fallback()
             .then(|| header::install_hint(&resolution))
-            .flatten();
-        header::render(&command, hint.as_deref(), usize::from(width))
+            .flatten()
+            .into_iter()
+            .collect();
+        if matches!(resolution.backend, Backend::Internal(Internal::Image)) {
+            notes.push(format!("# imagem: {}", image_protocol.name()));
+        }
+        header::render(&command, &notes, usize::from(width))
     };
 
-    let stdout = std::io::stdout();
     let pager = pager::select(cli.no_pager, stdout.is_terminal());
     let content = Content {
         data: content.as_deref().unwrap_or_default(),
         temp_path: &temp_path,
         width,
+        image_protocol,
     };
     run_backend(
         resolution.backend,
@@ -190,6 +198,8 @@ struct Content<'a> {
     temp_path: &'a Path,
     /// Largura do terminal.
     width: u16,
+    /// Protocolo usado por backends que escrevem direto no terminal.
+    image_protocol: image::Protocol,
 }
 
 fn run_backend(
@@ -200,6 +210,20 @@ fn run_backend(
     pager: &dyn pager::Pager,
 ) -> Result<()> {
     match backend {
+        Backend::Internal(internal) if internal.writes_to_terminal() => {
+            // Imagem: ignora o pager (e `--no-pager`). O cabeçalho sai antes,
+            // direto no stdout, e conta nas linhas que a imagem não pode ocupar.
+            let reserved = u32::try_from(header.lines().count()).unwrap_or(u32::MAX);
+            let mut out = std::io::stdout().lock();
+            out.write_all(header.as_bytes())?;
+            return internal.render_to_terminal(
+                input,
+                content.data,
+                content.image_protocol,
+                reserved,
+                &mut out,
+            );
+        }
         Backend::Internal(internal) => {
             let mut buffer = Vec::new();
             internal.render(input, content.data, content.width, &mut buffer)?;
@@ -212,6 +236,7 @@ fn run_backend(
                 data: &buffer,
                 temp_path: content.temp_path,
                 width: content.width,
+                image_protocol: content.image_protocol,
             };
             return run_backend(sink, &Input::Stdin, &piped, header, pager);
         }

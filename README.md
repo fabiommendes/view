@@ -52,10 +52,24 @@ Backends internos (Rust) ainda não implementados são pulados.
 | csv, tsv | tabela interna (`csv` + `comfy-table`) → `bat -l csv` → `cat` |
 | svg | interno (pendente) → `bat -l svg` → `cat` |
 | url | baixa e usa a cadeia do tipo da resposta (ver abaixo) |
-| imagem, pdf, arquivo compactado, mídia | interno (pendente) |
+| imagem | interno, direto no terminal, sem pager (ver abaixo) |
+| pdf, arquivo compactado, mídia | interno (pendente) |
 
 A detecção usa diretório, prefixo `http(s)://`, magic bytes, extensão e, por
 último, o conteúdo.
+
+## Imagens
+
+png, jpeg, gif (primeiro quadro) e webp, de arquivo, stdin ou URL. Imagens não
+passam pelo pager e `--no-pager` não muda nada: o cabeçalho e a imagem saem
+direto no stdout. O cabeçalho ganha `# imagem: kitty` ou `# imagem: meio-bloco`.
+
+- kitty: com `TERM=xterm-kitty`, `KITTY_WINDOW_ID` ou `TERM_PROGRAM=ghostty` e
+  stdout num terminal. Transmite o PNG com `a=T`.
+- meio-bloco: o resto (inclusive pipe e redirecionamento). Usa `▀` truecolor.
+- Tamanho: no máximo a largura do terminal e a altura da tela menos o
+  cabeçalho, na proporção da imagem (célula em pixels via `TIOCGWINSZ`; sem
+  ela, 1:2). Imagem pequena não é ampliada.
 
 ## URLs
 
