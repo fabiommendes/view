@@ -22,7 +22,7 @@ view [OPTIONS] [TARGET]
 
 `TARGET` ausente ou `-` lê o stdin inteiro e detecta o formato pelo conteúdo
 (magic bytes, binário ou texto; texto que parece JSON ou TOML vira JSON ou
-TOML). Os backends recebem os bytes por pipe e o cabeçalho mostra `-`; `eza` e
+TOML, e texto que começa com `<!doctype html` ou `<html` vira HTML). Os backends recebem os bytes por pipe e o cabeçalho mostra `-`; `eza` e
 `ls`, que exigem caminho, recebem um arquivo temporário (modo 0600) apagado ao
 final, e o cabeçalho mostra o caminho dele.
 
@@ -48,7 +48,8 @@ Backends internos (Rust) ainda não implementados são pulados.
 | binário | `hexyl` → `xxd` |
 | json, yaml, toml | `bat -l <tipo>` → `cat` |
 | json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
-| html, svg, csv | interno (pendente) → `bat -l <tipo>` → `cat` |
+| html | conversão interna (`htmd`, sem script, estilo e comentário) → cadeia de markdown (`glow` → `bat -l md` → `cat`) |
+| svg, csv | interno (pendente) → `bat -l <tipo>` → `cat` |
 | url, imagem, pdf, arquivo compactado, mídia | interno (pendente) |
 
 A detecção usa diretório, prefixo `http(s)://` e extensão. Magic bytes ficam

@@ -427,3 +427,86 @@ mod structured {
         assert!(text.trim_end().ends_with("-l yaml"), "{text}");
     }
 }
+
+mod html {
+    use super::*;
+    use std::io::Write;
+    use std::process::Stdio;
+
+    const PAGE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/examples/page.html");
+
+    /// Roda `view` com `args` e o `input` no stdin, se houver.
+    fn run(args: &[&str], input: Option<&[u8]>) -> std::process::Output {
+        let mut child = view()
+            .args(args)
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        if let Some(bytes) = input {
+            child.stdin.take().unwrap().write_all(bytes).unwrap();
+        }
+        child.wait_with_output().unwrap()
+    }
+
+    /// Remove sequências de escape ANSI (o `glow` colore até os espaços).
+    fn strip_ansi(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    fn assert_markdown_of_page(text: &str) {
+        let text = &strip_ansi(text);
+        assert!(text.contains("Bem-vindo"), "{text}");
+        assert!(text.contains("Primeiro item"), "{text}");
+        assert!(text.contains("guia completo"), "{text}");
+        assert!(text.contains("alfa"), "{text}");
+        assert!(!text.contains("console.log"), "{text}");
+        assert!(!text.contains("font-family"), "{text}");
+        assert!(!text.contains("<h1>"), "{text}");
+    }
+
+    #[test]
+    fn file_renders_as_markdown() {
+        let out = run(&["--no-pager", "-q", PAGE], None);
+        assert!(out.status.success(), "{out:?}");
+        assert_markdown_of_page(&stdout_of(&out));
+    }
+
+    #[test]
+    fn stdin_is_detected_as_html() {
+        let page = std::fs::read(PAGE).unwrap();
+        let out = run(&["--no-pager", "-q"], Some(&page));
+        assert!(out.status.success(), "{out:?}");
+        assert_markdown_of_page(&stdout_of(&out));
+    }
+
+    #[test]
+    fn dry_run_shows_internal_step_and_markdown_viewer() {
+        let out = run(&["-n", PAGE], None);
+        let text = stdout_of(&out);
+        assert!(text.contains("html→md interno"), "{text}");
+        assert!(text.contains(" | "), "{text}");
+        assert!(
+            text.contains("glow") || text.contains("bat") || text.contains("cat"),
+            "{text}"
+        );
+    }
+}
