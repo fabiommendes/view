@@ -20,7 +20,11 @@ $ bat -l md README.md
 view [OPTIONS] [TARGET]
 ```
 
-`TARGET` ausente ou `-` lê o stdin.
+`TARGET` ausente ou `-` lê o stdin inteiro e detecta o formato pelo conteúdo
+(magic bytes, binário ou texto; texto que parece JSON ou TOML vira JSON ou
+TOML). Os backends recebem os bytes por pipe e o cabeçalho mostra `-`; `eza` e
+`ls`, que exigem caminho, recebem um arquivo temporário (modo 0600) apagado ao
+final, e o cabeçalho mostra o caminho dele.
 
 | Opção | Efeito |
 | :-- | :-- |

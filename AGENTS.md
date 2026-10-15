@@ -22,6 +22,7 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 ## Mapa
 
 - `src/detect.rs`: `Input`, `Kind` e detecção (URL, diretório, magic bytes, extensão, conteúdo).
+- `src/stdin.rs`: leitura de stdin e arquivo temporário (guard com `Drop`) para backends que exigem caminho.
 - `src/backend.rs`: `Backend` (externo ou interno) e resolução da cadeia.
 - `src/route.rs`: tabela `Kind` → cadeia de backends.
 - `src/header.rs`: linha do comando, dica de instalação e régua.
