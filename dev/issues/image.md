@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_progress
 tags: [image, kitty]
 relatedTo: [dev/rfc/mvp.md, dev/notes/kitty-placeholders.md]
 kind: enhancement
