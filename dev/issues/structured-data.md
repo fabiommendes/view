@@ -1,11 +1,12 @@
 ---
 type: issue
-status: in_review
+status: completed
 tags: [json, yaml, toml]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
 created: 2026-10-15
 creator: claude
+closed: 2026-10-15
 ---
 
 # Conversão entre json, yaml e toml com --as

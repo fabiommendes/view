@@ -1,11 +1,12 @@
 ---
 type: issue
-status: in_review
+status: completed
 tags: [image, kitty]
 relatedTo: [dev/rfc/mvp.md, dev/notes/kitty-placeholders.md]
 kind: enhancement
 created: 2026-10-15
 creator: claude
+closed: 2026-10-15
 ---
 
 # Imagens direto no terminal, sem pager
