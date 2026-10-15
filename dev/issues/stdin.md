@@ -28,6 +28,6 @@ cadeia normal.
 ## Plano
 
 - [x] Detectar o formato do stdin pelo conteúdo (magic bytes, texto ou binário e JSON/TOML por heurística), com testes unitários.
-- [ ] Backends que exigem caminho (`eza`, `ls`) recebem um arquivo temporário com permissão 0600, apagado por um guard com `Drop`.
-- [ ] Demais backends recebem os bytes por pipe; o comando do cabeçalho mostra `-` ou o caminho temporário.
+- [x] Backends que exigem caminho (`eza`, `ls`) recebem um arquivo temporário com permissão 0600, apagado por um guard com `Drop`.
+- [x] Demais backends recebem os bytes por pipe; o comando do cabeçalho mostra `-` ou o caminho temporário.
 - [ ] Testes de integração com stdin em pipe e `just check`.

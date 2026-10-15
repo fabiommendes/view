@@ -53,6 +53,9 @@ pub enum Backend {
         program: &'static str,
         args: Vec<String>,
         install_hint: Option<&'static str>,
+        /// Não lê stdin: recebe sempre um caminho (arquivo temporário, se a
+        /// entrada vier do stdin).
+        needs_path: bool,
     },
     Internal(Internal),
 }
@@ -67,7 +70,16 @@ impl Backend {
             program,
             args: args.iter().map(|a| (*a).to_owned()).collect(),
             install_hint,
+            needs_path: false,
         }
+    }
+
+    /// Marca um backend externo que exige caminho e não lê stdin.
+    pub fn path_only(mut self) -> Self {
+        if let Self::External { needs_path, .. } = &mut self {
+            *needs_path = true;
+        }
+        self
     }
 
     pub fn is_available(&self, path: &OsStr) -> bool {
@@ -77,16 +89,38 @@ impl Backend {
         }
     }
 
+    /// O backend exige um caminho e não lê stdin.
+    pub fn needs_path(&self) -> bool {
+        matches!(
+            self,
+            Self::External {
+                needs_path: true,
+                ..
+            }
+        )
+    }
+
     /// Programa e argumentos a executar; `None` para backend interno.
-    pub fn argv(&self, input: &Input) -> Option<Vec<String>> {
-        let Self::External { program, args, .. } = self else {
+    ///
+    /// Para stdin, o último argumento é `-` ou, se o backend exige caminho,
+    /// `stdin_path` (o arquivo temporário com o conteúdo).
+    pub fn argv(&self, input: &Input, stdin_path: &Path) -> Option<Vec<String>> {
+        let Self::External {
+            program,
+            args,
+            needs_path,
+            ..
+        } = self
+        else {
             return None;
         };
         let mut argv = vec![(*program).to_owned()];
         argv.extend(args.iter().cloned());
-        if let Input::Target(target) = input {
-            argv.push(target.clone());
-        }
+        argv.push(match input {
+            Input::Target(target) => target.clone(),
+            Input::Stdin if *needs_path => stdin_path.to_string_lossy().into_owned(),
+            Input::Stdin => "-".to_owned(),
+        });
         Some(argv)
     }
 }
@@ -192,11 +226,24 @@ mod tests {
     }
 
     #[test]
-    fn argv_appends_target_only_for_files() {
+    fn argv_ends_with_target_dash_or_temp_path() {
+        let tmp = Path::new("/tmp/x");
         let backend = Backend::external("bat", &["-l", "md"], None);
         let file = Input::Target("a.md".into());
-        assert_eq!(backend.argv(&file).unwrap(), ["bat", "-l", "md", "a.md"]);
-        assert_eq!(backend.argv(&Input::Stdin).unwrap(), ["bat", "-l", "md"]);
-        assert!(Backend::Internal(Internal::Pdf).argv(&file).is_none());
+        assert_eq!(
+            backend.argv(&file, tmp).unwrap(),
+            ["bat", "-l", "md", "a.md"]
+        );
+        assert_eq!(
+            backend.argv(&Input::Stdin, tmp).unwrap(),
+            ["bat", "-l", "md", "-"]
+        );
+        let ls = Backend::external("ls", &["-la"], None).path_only();
+        assert!(ls.needs_path());
+        assert_eq!(
+            ls.argv(&Input::Stdin, tmp).unwrap(),
+            ["ls", "-la", "/tmp/x"]
+        );
+        assert!(Backend::Internal(Internal::Pdf).argv(&file, tmp).is_none());
     }
 }

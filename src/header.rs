@@ -1,5 +1,7 @@
 //! Cabeçalho: comando equivalente, dica de instalação e régua.
 
+use std::path::Path;
+
 use crate::backend::{Backend, Resolution};
 use crate::detect::{Input, Kind};
 
@@ -11,9 +13,10 @@ pub fn terminal_width() -> u16 {
     terminal_size::terminal_size().map_or(80, |(w, _)| w.0)
 }
 
-/// Linha `$ ...` que reproduz o que foi feito.
-pub fn command_line(backend: &Backend, input: &Input, kind: Kind) -> String {
-    if let Some(argv) = backend.argv(input) {
+/// Linha `$ ...` que reproduz o que foi feito. `stdin_path` é o arquivo
+/// temporário usado por backends que exigem caminho quando a entrada é stdin.
+pub fn command_line(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {
+    if let Some(argv) = backend.argv(input, stdin_path) {
         let words: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
         return format!("$ {}", words.join(" "));
     }
@@ -90,7 +93,7 @@ mod tests {
         let backend = Backend::external("bat", &["-l", "md"], None);
         let input = Input::Target("meu arquivo.md".into());
         assert_eq!(
-            command_line(&backend, &input, Kind::Markdown),
+            command_line(&backend, &input, Kind::Markdown, Path::new("/tmp/x")),
             "$ bat -l md 'meu arquivo.md'"
         );
     }
@@ -98,8 +101,28 @@ mod tests {
     #[test]
     fn internal_command_line_describes_work() {
         let backend = Backend::Internal(Internal::Csv);
-        let line = command_line(&backend, &Input::Target("a.csv".into()), Kind::Csv);
+        let line = command_line(
+            &backend,
+            &Input::Target("a.csv".into()),
+            Kind::Csv,
+            Path::new("/tmp/x"),
+        );
         assert_eq!(line, "$ view --as csv a.csv  # csv→tabela interna");
+    }
+
+    #[test]
+    fn stdin_command_line_shows_dash_or_temp_path() {
+        let tmp = Path::new("/tmp/view-1");
+        let bat = Backend::external("bat", &[], None);
+        assert_eq!(
+            command_line(&bat, &Input::Stdin, Kind::Text, tmp),
+            "$ bat -"
+        );
+        let ls = Backend::external("ls", &["-la"], None).path_only();
+        assert_eq!(
+            command_line(&ls, &Input::Stdin, Kind::Directory, tmp),
+            "$ ls -la /tmp/view-1"
+        );
     }
 
     #[test]

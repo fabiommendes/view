@@ -35,8 +35,9 @@ pub fn chain(kind: Kind, width: u16) -> Vec<Backend> {
                 "eza",
                 &["-la", "--tree", "-L2", "--color=always"],
                 Some("pacman -S eza"),
-            ),
-            Backend::external("ls", &["-la", "--color=always"], None),
+            )
+            .path_only(),
+            Backend::external("ls", &["-la", "--color=always"], None).path_only(),
         ],
         Kind::Binary => vec![
             Backend::external("hexyl", &[], Some("pacman -S hexyl")),
