@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_progress
 tags: [detect]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
