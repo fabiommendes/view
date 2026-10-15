@@ -24,3 +24,10 @@ cadeia normal.
 
 - `cat Cargo.toml | view --no-pager -q` sai com highlight de TOML.
 - `printf '# a' | view --as md -n` mostra o comando do `glow`.
+
+## Plano
+
+- [ ] Detectar o formato do stdin pelo conteúdo (magic bytes e texto ou binário), com testes unitários.
+- [ ] Backends que exigem caminho (`eza`, `ls`) recebem um arquivo temporário com permissão 0600, apagado por um guard com `Drop`.
+- [ ] Demais backends recebem os bytes por pipe; o comando do cabeçalho mostra `-` ou o caminho temporário.
+- [ ] Testes de integração com stdin em pipe e `just check`.
