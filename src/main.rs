@@ -4,6 +4,7 @@ mod backend;
 mod convert;
 mod detect;
 mod header;
+mod html;
 mod pager;
 mod route;
 mod stdin;

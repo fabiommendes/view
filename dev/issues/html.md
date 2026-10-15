@@ -21,3 +21,10 @@ creator: claude
 - Uma fixture HTML com título, lista, link e tabela vira markdown com os
   quatro elementos (teste unitário sobre a conversão).
 - `view -n fixture.html` mostra o comando do `glow`.
+
+## Plano
+
+- [x] Dependência `htmd` e módulo `html` (html→markdown, sem script, estilo e comentário) com testes unitários (R1, R3).
+- [ ] `Internal::Html` implementado e rota `html→md interno | <cadeia de markdown>` com `Backend::Pipe` (R1, R2).
+- [ ] Detecção de HTML no stdin pelo conteúdo (`<!doctype html` ou `<html` no começo).
+- [ ] Testes de integração (`--no-pager -q`, `-n`) sobre `page.html` e `README.md`.
