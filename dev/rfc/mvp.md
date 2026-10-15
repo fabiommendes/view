@@ -127,3 +127,8 @@ sem `bat`.
 - dev/issues/url.md
 - dev/issues/csv.md
 - dev/issues/image.md
+- dev/issues/svg.md
+- dev/issues/pdf.md
+- dev/issues/archive.md
+- dev/issues/media.md
+- dev/issues/config-file.md
