@@ -28,7 +28,7 @@ Hoje `detect` usa só a extensão, então `view /usr/bin/ls` cai em texto e o
 
 ## Plano
 
-- [ ] Adicionar `infer` e `mime_guess`.
-- [ ] Detectar por magic bytes, extensão (tabela e `mime_guess`) e conteúdo, com testes unitários.
+- [x] Adicionar `infer` e `mime_guess`.
+- [x] Detectar por magic bytes, extensão (tabela e `mime_guess`) e conteúdo, com testes unitários.
 - [ ] Teste de integração com `view -n` sobre `tests/examples/`.
 - [ ] Atualizar `AGENTS.md` e `tests/examples/README.md`.

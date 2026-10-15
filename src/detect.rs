@@ -1,5 +1,7 @@
 //! Detecção do tipo de conteúdo a partir do alvo.
 
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Result, bail};
@@ -89,9 +91,11 @@ impl Kind {
     }
 }
 
-/// Detecta o tipo: diretório, URL e extensão, nessa ordem.
-///
-/// TODO: magic bytes para arquivos sem extensão ou com extensão enganosa.
+/// Quantos bytes do início do arquivo a detecção por conteúdo examina.
+const SNIFF_LEN: usize = 8192;
+
+/// Detecta o tipo, na ordem: URL, diretório, magic bytes, extensão e, por
+/// último, texto ou binário pelo conteúdo.
 pub fn detect(input: &Input) -> Kind {
     match input {
         Input::Stdin => Kind::Text,
@@ -101,22 +105,62 @@ pub fn detect(input: &Input) -> Kind {
             } else if Path::new(target).is_dir() {
                 Kind::Directory
             } else {
-                from_extension(target)
+                detect_file(Path::new(target))
             }
         }
     }
+}
+
+/// Detecção de um arquivo. Um arquivo ilegível ou inexistente só tem a
+/// extensão para decidir e, sem ela, vira `Text`.
+fn detect_file(path: &Path) -> Kind {
+    let head = read_head(path).unwrap_or_default();
+    from_magic(&head)
+        .or_else(|| from_extension(path))
+        .unwrap_or_else(|| from_content(&head))
+}
+
+/// Lê até `SNIFF_LEN` bytes do início do arquivo.
+fn read_head(path: &Path) -> std::io::Result<Vec<u8>> {
+    let mut head = Vec::with_capacity(SNIFF_LEN);
+    File::open(path)?
+        .take(SNIFF_LEN as u64)
+        .read_to_end(&mut head)?;
+    Ok(head)
 }
 
 pub fn is_url(target: &str) -> bool {
     target.starts_with("http://") || target.starts_with("https://")
 }
 
-/// Tipo a partir da extensão; sem extensão conhecida, `Text`.
-pub fn from_extension(path: &str) -> Kind {
-    let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) else {
-        return Kind::Text;
-    };
-    match ext.to_ascii_lowercase().as_str() {
+/// Tipo pelos magic bytes (`infer`). `None` se a assinatura não é conhecida
+/// ou se é de texto (shebang), que a extensão e o conteúdo decidem melhor.
+pub fn from_magic(head: &[u8]) -> Option<Kind> {
+    let known = infer::get(head)?;
+    if known.mime_type() == "application/pdf" {
+        return Some(Kind::Pdf);
+    }
+    match known.matcher_type() {
+        infer::MatcherType::Image => Some(Kind::Image),
+        infer::MatcherType::Archive => Some(Kind::Archive),
+        infer::MatcherType::Audio | infer::MatcherType::Video => Some(Kind::Media),
+        infer::MatcherType::App
+        | infer::MatcherType::Doc
+        | infer::MatcherType::Book
+        | infer::MatcherType::Font => Some(Kind::Binary),
+        infer::MatcherType::Text | infer::MatcherType::Custom => None,
+    }
+}
+
+/// Tipo pela extensão: a tabela própria primeiro, depois `mime_guess`.
+/// `None` sem extensão ou com extensão desconhecida.
+pub fn from_extension(path: &Path) -> Option<Kind> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    from_extension_table(&ext).or_else(|| from_mime(path))
+}
+
+fn from_extension_table(ext: &str) -> Option<Kind> {
+    Some(match ext {
         "md" | "markdown" => Kind::Markdown,
         "html" | "htm" => Kind::Html,
         "json" => Kind::Json,
@@ -132,6 +176,45 @@ pub fn from_extension(path: &str) -> Kind {
         "rs" | "py" | "js" | "ts" | "jsx" | "tsx" | "c" | "h" | "cc" | "cpp" | "hpp" | "go"
         | "java" | "kt" | "rb" | "lua" | "sh" | "bash" | "zsh" | "fish" | "css" | "sql" | "php"
         | "swift" | "zig" | "nix" => Kind::Code,
+        _ => return None,
+    })
+}
+
+/// Tipo pelo MIME que `mime_guess` associa à extensão.
+fn from_mime(path: &Path) -> Option<Kind> {
+    let mime = mime_guess::from_path(path).first()?;
+    match (mime.type_(), mime.subtype()) {
+        (mime_guess::mime::IMAGE, mime_guess::mime::SVG) => Some(Kind::Svg),
+        (mime_guess::mime::IMAGE, _) => Some(Kind::Image),
+        (mime_guess::mime::AUDIO | mime_guess::mime::VIDEO, _) => Some(Kind::Media),
+        (mime_guess::mime::TEXT, mime_guess::mime::HTML) => Some(Kind::Html),
+        (mime_guess::mime::TEXT, mime_guess::mime::CSV) => Some(Kind::Csv),
+        (mime_guess::mime::TEXT, _) => Some(Kind::Text),
+        (mime_guess::mime::APPLICATION, mime_guess::mime::JSON) => Some(Kind::Json),
+        (mime_guess::mime::APPLICATION, mime_guess::mime::PDF) => Some(Kind::Pdf),
+        (mime_guess::mime::APPLICATION, mime_guess::mime::OCTET_STREAM) => Some(Kind::Binary),
+        (mime_guess::mime::APPLICATION, sub) if is_archive_subtype(sub.as_str()) => {
+            Some(Kind::Archive)
+        }
+        _ => None,
+    }
+}
+
+fn is_archive_subtype(subtype: &str) -> bool {
+    matches!(
+        subtype,
+        "zip" | "gzip" | "x-tar" | "x-bzip2" | "x-xz" | "zstd" | "x-7z-compressed"
+    )
+}
+
+/// `Text` se o início do conteúdo é UTF-8 válido sem bytes nulos; senão
+/// `Binary`. Uma sequência UTF-8 cortada no fim da amostra ainda é texto.
+pub fn from_content(head: &[u8]) -> Kind {
+    if head.contains(&0) {
+        return Kind::Binary;
+    }
+    match std::str::from_utf8(head) {
+        Err(e) if e.error_len().is_some() => Kind::Binary,
         _ => Kind::Text,
     }
 }
@@ -140,20 +223,144 @@ pub fn from_extension(path: &str) -> Kind {
 mod tests {
     use super::*;
 
-    #[test]
-    fn extension_maps_to_kind() {
-        assert_eq!(from_extension("a/b/README.md"), Kind::Markdown);
-        assert_eq!(from_extension("main.RS"), Kind::Code);
-        assert_eq!(from_extension("x.tar"), Kind::Archive);
-        assert_eq!(from_extension("foto.jpeg"), Kind::Image);
-        assert_eq!(from_extension("data.yml"), Kind::Yaml);
-        assert_eq!(from_extension("notes.txt"), Kind::Text);
+    use std::path::PathBuf;
+
+    const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/examples");
+
+    fn example(name: &str) -> Input {
+        Input::Target(format!("{EXAMPLES}/{name}"))
+    }
+
+    /// Cria um arquivo temporário com o nome e o conteúdo dados.
+    fn temp_file(name: &str, content: &[u8]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("view-detect-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    fn kind_of(path: &Path) -> Kind {
+        detect(&Input::Target(path.to_str().unwrap().into()))
     }
 
     #[test]
-    fn unknown_or_missing_extension_is_text() {
-        assert_eq!(from_extension("Makefile"), Kind::Text);
-        assert_eq!(from_extension("a.zzzz"), Kind::Text);
+    fn extension_maps_to_kind() {
+        let kind = |p| from_extension(Path::new(p));
+        assert_eq!(kind("a/b/README.md"), Some(Kind::Markdown));
+        assert_eq!(kind("main.RS"), Some(Kind::Code));
+        assert_eq!(kind("x.tar"), Some(Kind::Archive));
+        assert_eq!(kind("foto.jpeg"), Some(Kind::Image));
+        assert_eq!(kind("data.yml"), Some(Kind::Yaml));
+        assert_eq!(kind("notes.txt"), Some(Kind::Text));
+    }
+
+    #[test]
+    fn mime_guess_covers_extensions_outside_the_table() {
+        let kind = |p| from_extension(Path::new(p));
+        assert_eq!(kind("a.tiff"), Some(Kind::Image));
+        assert_eq!(kind("a.aac"), Some(Kind::Media));
+        assert_eq!(kind("a.log"), Some(Kind::Text));
+    }
+
+    #[test]
+    fn unknown_or_missing_extension_is_none() {
+        assert_eq!(from_extension(Path::new("Makefile")), None);
+        assert_eq!(from_extension(Path::new("a.zzzz")), None);
+    }
+
+    /// Cabeçalho ELF real: `infer` exige o cabeçalho inteiro.
+    fn elf_head() -> Vec<u8> {
+        let mut head = std::fs::read(format!("{EXAMPLES}/program")).unwrap();
+        head.truncate(64);
+        head
+    }
+
+    #[test]
+    fn magic_bytes_map_to_kind() {
+        assert_eq!(from_magic(b"\x89PNG\r\n\x1a\n"), Some(Kind::Image));
+        assert_eq!(from_magic(&elf_head()), Some(Kind::Binary));
+        assert_eq!(from_magic(b"%PDF-1.7\n"), Some(Kind::Pdf));
+        assert_eq!(
+            from_magic(b"PK\x03\x04\x14\x00\x00\x00\x08\x00"),
+            Some(Kind::Archive)
+        );
+        assert_eq!(from_magic(b"\x1f\x8b\x08\x00"), Some(Kind::Archive));
+    }
+
+    #[test]
+    fn unknown_or_text_magic_is_none() {
+        assert_eq!(from_magic(b""), None);
+        assert_eq!(from_magic("só texto\n".as_bytes()), None);
+        assert_eq!(from_magic(b"#!/bin/sh\necho oi\n"), None);
+    }
+
+    #[test]
+    fn content_text_or_binary() {
+        assert_eq!(from_content(b""), Kind::Text);
+        assert_eq!(from_content("acentuação\n".as_bytes()), Kind::Text);
+        assert_eq!(from_content(b"abc\0def"), Kind::Binary);
+        assert_eq!(from_content(b"abc\xff\xfedef"), Kind::Binary);
+    }
+
+    #[test]
+    fn content_cut_in_the_middle_of_a_char_is_text() {
+        let cut = &"é".as_bytes()[..1];
+        assert_eq!(from_content(cut), Kind::Text);
+    }
+
+    #[test]
+    fn magic_bytes_win_over_extension() {
+        assert_eq!(detect(&example("image-as.txt")), Kind::Image);
+        let path = temp_file("fake.md", &elf_head());
+        assert_eq!(kind_of(&path), Kind::Binary);
+    }
+
+    #[test]
+    fn extension_wins_over_content() {
+        let path = temp_file("nulls.md", b"# titulo\0\0");
+        assert_eq!(kind_of(&path), Kind::Markdown);
+        assert_eq!(detect(&example("code.rs")), Kind::Code);
+    }
+
+    #[test]
+    fn unknown_magic_and_extension_fall_back_to_content() {
+        assert_eq!(detect(&example("LICENSE")), Kind::Text);
+        let text = temp_file("noext-text", "olá\n".as_bytes());
+        assert_eq!(kind_of(&text), Kind::Text);
+        let binary = temp_file("noext-binary", b"\x01\x02\0\x03");
+        assert_eq!(kind_of(&binary), Kind::Binary);
+        let unknown_ext = temp_file("data.zzzz", b"\x01\0\x02");
+        assert_eq!(kind_of(&unknown_ext), Kind::Binary);
+    }
+
+    #[test]
+    fn only_the_first_8_kib_are_inspected() {
+        let mut bytes = vec![b'a'; SNIFF_LEN];
+        bytes.push(0);
+        let path = temp_file("late-null", &bytes);
+        assert_eq!(kind_of(&path), Kind::Text);
+    }
+
+    #[test]
+    fn missing_file_uses_extension_then_text() {
+        assert_eq!(
+            detect(&Input::Target("/nao/existe/a.json".into())),
+            Kind::Json
+        );
+        assert_eq!(detect(&Input::Target("/nao/existe/a".into())), Kind::Text);
+    }
+
+    #[test]
+    fn examples_are_detected_by_content() {
+        assert_eq!(detect(&example("program")), Kind::Binary);
+        assert_eq!(detect(&example("binary.bin")), Kind::Binary);
+        assert_eq!(detect(&example("notes.txt")), Kind::Text);
+        assert_eq!(detect(&example("doc.pdf")), Kind::Pdf);
+        assert_eq!(detect(&example("archive.zip")), Kind::Archive);
+        assert_eq!(detect(&example("archive.tar.gz")), Kind::Archive);
+        assert_eq!(detect(&example("image.png")), Kind::Image);
+        assert_eq!(detect(&example("dir")), Kind::Directory);
     }
 
     #[test]
