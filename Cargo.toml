@@ -5,6 +5,7 @@ edition = "2024"
 description = "Open files, URLs and stdin in the right terminal viewer, inside a pager"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/fabiommendes/view"
 keywords = ["cli", "viewer", "pager", "terminal", "preview"]
 categories = ["command-line-utilities"]
 exclude = ["dev/", "tests/", "justfile", "AGENTS.md", "CLAUDE.md"]
