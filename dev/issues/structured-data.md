@@ -28,8 +28,8 @@ creator: claude
 
 ## Plano
 
-- [ ] Dependências e teste de ordem de chaves do `serde-saphyr` (R2).
-- [ ] Módulo `convert` (parse e serialização json, yaml, toml) com erros claros (R1, R2, R3).
+- [x] Dependências e teste de ordem de chaves do `serde-saphyr` (R2).
+- [x] Módulo `convert` (parse e serialização json, yaml, toml) com erros claros (R1, R2, R3).
 - [ ] Backend `Pipe`: renderizador interno cujos bytes alimentam outro backend; `Internal::Convert` (R1, R5).
 - [ ] Rota: `--as` entre formatos estruturados converte; igual à origem não muda (R4).
 - [ ] Testes de integração (pares de conversão, stdin, erro de `null` em TOML) e `README.md`.
