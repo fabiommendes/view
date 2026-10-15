@@ -1,0 +1,46 @@
+# AGENTS.md
+
+Orientações para agentes de código de IA (e para pessoas) que trabalham neste repositório.
+
+## Idioma
+
+Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002-idioma-dos-repositorios.md`:
+
+- Em português (pt-BR): documentos, comentários no código e mensagens de commit.
+- Em inglês: identificadores.
+
+## O que é
+
+`view` é uma CLI em Rust que roteia um arquivo, URL ou stdin para o visualizador certo e mostra o resultado num pager (`less -RF`). Cada formato tem uma cadeia ordenada de backends; vence o primeiro disponível. O primeiro conteúdo paginado é um cabeçalho com o comando equivalente.
+
+## Comandos
+
+- checagem (define "pronto"): `just check` (`cargo fmt --check`, `cargo clippy --all-targets -D warnings`, `cargo test`)
+- execução local: `cargo run -- [OPTIONS] [TARGET]`
+- spike de imagem: `cargo run --example kitty_placeholder -- foto.png | less -RF`
+
+## Mapa
+
+- `src/detect.rs`: `Input`, `Kind` e detecção (diretório, URL, extensão).
+- `src/backend.rs`: `Backend` (externo ou interno) e resolução da cadeia.
+- `src/route.rs`: tabela `Kind` → cadeia de backends.
+- `src/header.rs`: linha do comando, dica de instalação e régua.
+- `src/pager.rs`: trait `Pager`, pager externo e escrita direta.
+- `examples/kitty_placeholder/`: spike de imagem com placeholders Unicode do kitty.
+- `dev/`: `issues/`, `adr/` e `notes/`, conforme o ADR 0003 do tooling-root.
+
+## Regras
+
+- Backends externos escrevem com cor num pipe que alimenta o nosso pager; nunca ative o pager deles.
+- Renderizadores internos (`backend::Internal`) ficam fora da resolução enquanto `is_implemented` for `false`. Ao implementar um, troque o `todo!()` e o `is_implemented`.
+- Toda cadeia nova em `route.rs` vem com teste e entra na tabela do `README.md`.
+- Sem crates novos sem necessidade clara.
+
+## Ordens permanentes
+
+Manutenções que um agente faz sem issue aprovada, desde que `just check` passe:
+
+- Corrigir avisos novos do clippy.
+- Atualizar dependências em versões compatíveis (`cargo update`).
+- Consertar um teste instável sem mudar o comportamento testado.
+- Corrigir links e caminhos quebrados na documentação.

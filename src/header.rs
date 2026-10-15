@@ -1,0 +1,125 @@
+//! Cabeçalho: comando equivalente, dica de instalação e régua.
+
+use crate::backend::{Backend, Resolution};
+use crate::detect::{Input, Kind};
+
+const DIM: &str = "\x1b[2m";
+const RESET: &str = "\x1b[0m";
+
+/// Largura do terminal em colunas; 80 quando não há terminal.
+pub fn terminal_width() -> u16 {
+    terminal_size::terminal_size().map_or(80, |(w, _)| w.0)
+}
+
+/// Linha `$ ...` que reproduz o que foi feito.
+pub fn command_line(backend: &Backend, input: &Input, kind: Kind) -> String {
+    if let Some(argv) = backend.argv(input) {
+        let words: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
+        return format!("$ {}", words.join(" "));
+    }
+    let Backend::Internal(internal) = backend else {
+        unreachable!("argv só é None para backend interno");
+    };
+    let target = match input {
+        Input::Stdin => "-".to_owned(),
+        Input::Target(t) => shell_quote(t),
+    };
+    format!(
+        "$ view --as {} {target}  # {}",
+        kind.name(),
+        internal.description()
+    )
+}
+
+/// Sugestão de instalação quando a cadeia caiu num fallback.
+pub fn install_hint(resolution: &Resolution<'_>) -> Option<String> {
+    resolution.skipped.iter().find_map(|b| match b {
+        Backend::External {
+            program,
+            install_hint: Some(hint),
+            ..
+        } => Some(format!("# {program} não encontrado: {hint}")),
+        _ => None,
+    })
+}
+
+/// Monta o cabeçalho completo, esmaecido, terminado em newline.
+pub fn render(command: &str, hint: Option<&str>, width: usize) -> String {
+    let mut out = format!("{DIM}{command}{RESET}\n");
+    if let Some(hint) = hint {
+        out.push_str(&format!("{DIM}{hint}{RESET}\n"));
+    }
+    out.push_str(&format!("{DIM}{}{RESET}\n", "─".repeat(width)));
+    out
+}
+
+fn shell_quote(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./=:,@%+".contains(c));
+    if plain {
+        word.to_owned()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::Internal;
+
+    #[test]
+    fn render_has_command_ruler_and_dim() {
+        let out = render("$ cat a", None, 5);
+        assert_eq!(out, "\x1b[2m$ cat a\x1b[0m\n\x1b[2m─────\x1b[0m\n");
+    }
+
+    #[test]
+    fn render_places_hint_between_command_and_ruler() {
+        let out = render("$ bat a", Some("# glow não encontrado: pacman -S glow"), 3);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert!(lines[1].contains("glow não encontrado: pacman -S glow"));
+        assert!(lines[2].contains("───"));
+    }
+
+    #[test]
+    fn command_line_quotes_words() {
+        let backend = Backend::external("bat", &["-l", "md"], None);
+        let input = Input::Target("meu arquivo.md".into());
+        assert_eq!(
+            command_line(&backend, &input, Kind::Markdown),
+            "$ bat -l md 'meu arquivo.md'"
+        );
+    }
+
+    #[test]
+    fn internal_command_line_describes_work() {
+        let backend = Backend::Internal(Internal::Csv);
+        let line = command_line(&backend, &Input::Target("a.csv".into()), Kind::Csv);
+        assert_eq!(line, "$ view --as csv a.csv  # csv→tabela interna");
+    }
+
+    #[test]
+    fn hint_comes_from_preferred_backend() {
+        let chain = [
+            Backend::external("glow", &[], Some("pacman -S glow")),
+            Backend::external("cat", &[], None),
+        ];
+        let res = Resolution {
+            backend: &chain[1],
+            skipped: &chain[..1],
+        };
+        assert_eq!(
+            install_hint(&res).unwrap(),
+            "# glow não encontrado: pacman -S glow"
+        );
+        let res = Resolution {
+            backend: &chain[0],
+            skipped: &[],
+        };
+        assert!(install_hint(&res).is_none());
+    }
+}
