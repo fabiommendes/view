@@ -256,7 +256,9 @@ fn from_extension_table(ext: &str) -> Option<Kind> {
 pub fn from_content_type(value: &str) -> Option<Kind> {
     let essence = value.split(';').next()?.trim().to_ascii_lowercase();
     let (kind, subtype) = essence.split_once('/')?;
-    let structured = subtype.rsplit_once('+').map_or(subtype, |(_, suffix)| suffix);
+    let structured = subtype
+        .rsplit_once('+')
+        .map_or(subtype, |(_, suffix)| suffix);
     match (kind, structured) {
         ("text", "html") | ("application", "xhtml") => Some(Kind::Html),
         ("text", "csv" | "tab-separated-values") => Some(Kind::Csv),
@@ -265,7 +267,7 @@ pub fn from_content_type(value: &str) -> Option<Kind> {
         (_, "json") => Some(Kind::Json),
         (_, "yaml" | "x-yaml") => Some(Kind::Yaml),
         (_, "toml") => Some(Kind::Toml),
-        ("image", "svg") => Some(Kind::Svg),
+        ("image", _) if subtype.starts_with("svg") => Some(Kind::Svg),
         ("image", _) => Some(Kind::Image),
         ("audio" | "video", _) => Some(Kind::Media),
         ("application", "pdf") => Some(Kind::Pdf),

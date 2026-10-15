@@ -82,11 +82,7 @@ fn run(cli: &Cli) -> Result<()> {
         .filter(|_| !cli.dry_run)
         .map(fetch::download)
         .transpose()?;
-    let input = if url.is_some() {
-        Input::Stdin
-    } else {
-        target
-    };
+    let input = if url.is_some() { Input::Stdin } else { target };
     let (content, content_type) = match download {
         Some(download) => (Some(download.bytes), download.content_type),
         None => (
@@ -148,7 +144,13 @@ fn run(cli: &Cli) -> Result<()> {
         data: content.as_deref().unwrap_or_default(),
         temp_path: &temp_path,
     };
-    run_backend(resolution.backend, &input, &content, &header, pager.as_ref())
+    run_backend(
+        resolution.backend,
+        &input,
+        &content,
+        &header,
+        pager.as_ref(),
+    )
 }
 
 /// Tipos que a detecção usa quando não reconhece o formato da entrada.
