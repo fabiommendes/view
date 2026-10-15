@@ -3,9 +3,8 @@
 Arquivos de exemplo para validar o `view` à mão e como entrada de testes.
 Rode `view <arquivo>` e confira o tipo e o que está na tabela.
 
-O tipo é decidido pela extensão (`src/detect.rs`), exceto diretórios e URLs.
-Quando a extensão não basta, a coluna "tipo esperado" traz o que o conteúdo
-pede; o `view` ainda não lê magic bytes.
+O tipo é decidido em `src/detect.rs`, nesta ordem: URL e diretório, magic
+bytes, extensão e, por fim, texto ou binário pelo conteúdo.
 
 | arquivo | tipo esperado | o que observar |
 | :-- | :-- | :-- |
@@ -24,12 +23,12 @@ pede; o `view` ainda não lê magic bytes.
 | `table.tsv` | csv | tabulações separam colunas; cai na mesma rota do CSV |
 | `image.png` | imagem | gradiente 64x48; o backend interno ainda não existe, então a saída atual é a da cadeia de fallback |
 | `photo.jpg` | imagem | mesmo gradiente em JPEG |
-| `image-as.txt` | imagem (pelo conteúdo) | PNG com extensão `.txt`; hoje cai em texto por extensão, o que é o esperado sem magic bytes |
+| `image-as.txt` | imagem (pelo conteúdo) | PNG com extensão `.txt`; os magic bytes vencem a extensão |
 | `drawing.svg` | svg | retângulo, círculo, triângulo e texto |
 | `doc.pdf` | pdf | uma página com texto simples |
 | `archive.zip` | arquivo compactado | lista `code.py`, `notes.txt` e `readme.md` |
 | `archive.tar.gz` | arquivo compactado | lista `page.html`, `data.json` e `config.yaml` |
 | `binary.bin` | binário | 512 bytes aleatórios com nulos; hexdump (`hexyl` ou `xxd`) |
-| `program` | binário (pelo conteúdo) | ELF sem extensão; hoje cai em texto, o que é o esperado sem magic bytes |
+| `program` | binário (pelo conteúdo) | ELF sem extensão; sem extensão, o conteúdo decide |
 | `sound.wav` | mídia | 1 s de tom a 8 kHz, mono |
 | `dir/` | diretório | `a.txt`, `b.md` e o subdiretório `sub/` com `c.txt` |
