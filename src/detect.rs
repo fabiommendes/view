@@ -250,6 +250,30 @@ fn from_extension_table(ext: &str) -> Option<Kind> {
     })
 }
 
+/// Tipo pelo cabeçalho `Content-Type` de uma resposta HTTP. `None` se o
+/// cabeçalho é ilegível ou genérico (`text/plain`, `application/octet-stream`
+/// e tipos desconhecidos), caso em que o conteúdo decide.
+pub fn from_content_type(value: &str) -> Option<Kind> {
+    let essence = value.split(';').next()?.trim().to_ascii_lowercase();
+    let (kind, subtype) = essence.split_once('/')?;
+    let structured = subtype.rsplit_once('+').map_or(subtype, |(_, suffix)| suffix);
+    match (kind, structured) {
+        ("text", "html") | ("application", "xhtml") => Some(Kind::Html),
+        ("text", "csv" | "tab-separated-values") => Some(Kind::Csv),
+        ("text", "markdown" | "x-markdown") => Some(Kind::Markdown),
+        ("text", "css" | "javascript") | ("application", "javascript") => Some(Kind::Code),
+        (_, "json") => Some(Kind::Json),
+        (_, "yaml" | "x-yaml") => Some(Kind::Yaml),
+        (_, "toml") => Some(Kind::Toml),
+        ("image", "svg") => Some(Kind::Svg),
+        ("image", _) => Some(Kind::Image),
+        ("audio" | "video", _) => Some(Kind::Media),
+        ("application", "pdf") => Some(Kind::Pdf),
+        ("application", sub) if is_archive_subtype(sub) => Some(Kind::Archive),
+        _ => None,
+    }
+}
+
 /// Tipo pelo MIME que `mime_guess` associa à extensão.
 fn from_mime(path: &Path) -> Option<Kind> {
     let mime = mime_guess::from_path(path).first()?;
@@ -496,6 +520,30 @@ mod tests {
         let mut bytes = vec![b'a'; SNIFF_LEN];
         bytes.push(0);
         assert_eq!(detect_bytes(&bytes), Kind::Text);
+    }
+
+    #[test]
+    fn content_type_maps_to_kind() {
+        let kind = from_content_type;
+        assert_eq!(kind("text/html; charset=utf-8"), Some(Kind::Html));
+        assert_eq!(kind("Application/JSON"), Some(Kind::Json));
+        assert_eq!(kind("application/vnd.api+json"), Some(Kind::Json));
+        assert_eq!(kind("image/png"), Some(Kind::Image));
+        assert_eq!(kind("image/svg+xml"), Some(Kind::Svg));
+        assert_eq!(kind("application/pdf"), Some(Kind::Pdf));
+        assert_eq!(kind("application/zip"), Some(Kind::Archive));
+        assert_eq!(kind("video/mp4"), Some(Kind::Media));
+        assert_eq!(kind("text/csv"), Some(Kind::Csv));
+        assert_eq!(kind("text/markdown"), Some(Kind::Markdown));
+    }
+
+    #[test]
+    fn generic_or_unknown_content_type_is_none() {
+        assert_eq!(from_content_type("text/plain; charset=utf-8"), None);
+        assert_eq!(from_content_type("application/octet-stream"), None);
+        assert_eq!(from_content_type("application/x-algo"), None);
+        assert_eq!(from_content_type("lixo"), None);
+        assert_eq!(from_content_type(""), None);
     }
 
     #[test]

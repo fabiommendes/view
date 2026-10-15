@@ -54,23 +54,23 @@ impl Internal {
         text.to_owned()
     }
 
-    /// Escreve a renderização de `input` em `out`. `stdin` é o conteúdo já
-    /// lido quando `input` é o stdin.
+    /// Escreve a renderização de `input` em `out`. `content` é o conteúdo já
+    /// em memória (stdin ou URL baixada) quando `input` é `Input::Stdin`.
     pub fn render(
         self,
         input: &Input,
-        stdin: &[u8],
+        content: &[u8],
         out: &mut dyn std::io::Write,
     ) -> anyhow::Result<()> {
         match self {
             Self::Convert { from, to } => {
-                let bytes = source_bytes(input, stdin)?;
+                let bytes = source_bytes(input, content)?;
                 let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
                 out.write_all(convert::convert(&text, from, to)?.as_bytes())?;
                 Ok(())
             }
             Self::Html => {
-                let bytes = source_bytes(input, stdin)?;
+                let bytes = source_bytes(input, content)?;
                 let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
                 out.write_all(html::to_markdown(&text)?.as_bytes())?;
                 Ok(())
@@ -80,10 +80,10 @@ impl Internal {
     }
 }
 
-/// Bytes da entrada: o conteúdo do stdin ou o arquivo.
-fn source_bytes(input: &Input, stdin: &[u8]) -> anyhow::Result<Vec<u8>> {
+/// Bytes da entrada: o conteúdo em memória ou o arquivo.
+fn source_bytes(input: &Input, content: &[u8]) -> anyhow::Result<Vec<u8>> {
     match input {
-        Input::Stdin => Ok(stdin.to_vec()),
+        Input::Stdin => Ok(content.to_vec()),
         Input::Target(path) => {
             std::fs::read(path).with_context(|| format!("não foi possível ler {path}"))
         }
@@ -97,8 +97,8 @@ pub enum Backend {
         program: &'static str,
         args: Vec<String>,
         install_hint: Option<&'static str>,
-        /// Não lê stdin: recebe sempre um caminho (arquivo temporário, se a
-        /// entrada vier do stdin).
+        /// Não lê stdin: recebe sempre um caminho (arquivo temporário, se o
+        /// conteúdo estiver em memória).
         needs_path: bool,
     },
     Internal(Internal),
@@ -153,7 +153,7 @@ impl Backend {
 
     /// Programa e argumentos a executar; `None` para backend interno ou `Pipe`.
     ///
-    /// Para stdin, o último argumento é `-` ou, se o backend exige caminho,
+    /// Para conteúdo em memória (`Input::Stdin`), o último argumento é `-` ou, se o backend exige caminho,
     /// `stdin_path` (o arquivo temporário com o conteúdo).
     pub fn argv(&self, input: &Input, stdin_path: &Path) -> Option<Vec<String>> {
         let Self::External {

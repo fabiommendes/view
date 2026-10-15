@@ -19,6 +19,20 @@ pub fn command_line(backend: &Backend, input: &Input, kind: Kind, stdin_path: &P
     format!("$ {}", command_body(backend, input, kind, stdin_path))
 }
 
+/// Comando de uma URL baixada: o `curl` equivalente alimenta o comando do
+/// backend, que lê o conteúdo pelo stdin. `command` é o resultado de
+/// `command_line` para a entrada `Input::Stdin`.
+pub fn from_url(url: &str, command: &str) -> String {
+    let body = command.strip_prefix("$ ").unwrap_or(command);
+    format!("$ curl -sL {} | {body}", shell_quote(url))
+}
+
+/// Comando de uma URL ainda não baixada (`-n` não faz requisição), então o
+/// backend é desconhecido.
+pub fn from_url_unresolved(url: &str) -> String {
+    format!("$ curl -sL {} | view -", shell_quote(url))
+}
+
 /// Comando sem o prefixo `$ `. Num `Pipe`, o destino lê o que o renderizador
 /// interno produz, então o cabeçalho mostra o destino sem alvo.
 fn command_body(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {

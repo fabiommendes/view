@@ -3,6 +3,7 @@
 mod backend;
 mod convert;
 mod detect;
+mod fetch;
 mod header;
 mod html;
 mod pager;
@@ -66,14 +67,43 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<()> {
-    let input = Input::from_arg(cli.target.as_deref());
-    // O `-n` com `--as` não precisa do conteúdo, então não bloqueia no stdin.
-    let stdin_data = (input == Input::Stdin && !(cli.dry_run && cli.format.is_some()))
-        .then(stdin::read_all)
+    let target = Input::from_arg(cli.target.as_deref());
+    // O `-n` com `--as` não precisa do conteúdo, então não lê nem baixa nada.
+    let needs_content = !(cli.dry_run && cli.format.is_some());
+    let url = cli.target.as_deref().filter(|t| detect::is_url(t));
+    // Sem `--as`, só a resposta diz o tipo, e o `-n` não faz requisição.
+    if let (Some(url), true, None) = (url, cli.dry_run, &cli.format) {
+        println!("{}", header::from_url_unresolved(url));
+        return Ok(());
+    }
+    // O conteúdo em memória (stdin ou URL baixada) é entregue aos backends
+    // como `Input::Stdin`.
+    let download = url
+        .filter(|_| !cli.dry_run)
+        .map(fetch::download)
         .transpose()?;
+    let input = if url.is_some() {
+        Input::Stdin
+    } else {
+        target
+    };
+    let (content, content_type) = match download {
+        Some(download) => (Some(download.bytes), download.content_type),
+        None => (
+            (input == Input::Stdin && needs_content)
+                .then(stdin::read_all)
+                .transpose()?,
+            None,
+        ),
+    };
     // Formato da entrada, se conhecido (sem conteúdo, o `-n` no stdin não sabe).
-    let source = match &stdin_data {
-        Some(bytes) => Some(detect::detect_bytes(bytes)),
+    let source = match &content {
+        Some(bytes) => Some(
+            content_type
+                .as_deref()
+                .and_then(detect::from_content_type)
+                .unwrap_or_else(|| detect::detect_bytes(bytes)),
+        ),
         None if input == Input::Stdin => None,
         None => Some(detect::detect(&input)),
     };
@@ -82,18 +112,21 @@ fn run(cli: &Cli) -> Result<()> {
         None => source.unwrap_or(Kind::Text),
     };
     let source = if Format::from_kind(kind).is_some() && source.is_some_and(is_plain_text) {
-        sniff_source(&input, stdin_data.as_deref()).or(source)
+        sniff_source(&input, content.as_deref()).or(source)
     } else {
         source
     };
-    let stdin_path = stdin::temp_path();
+    let temp_path = stdin::temp_path();
     let width = header::terminal_width();
     let chain = route::chain(kind, source, width);
     let path = std::env::var_os("PATH").unwrap_or_default();
     let resolution = backend::resolve(&chain, &path)
         .ok_or_else(|| anyhow!("nenhum visualizador disponível para {}", kind.name()))?;
 
-    let command = header::command_line(resolution.backend, &input, kind, &stdin_path);
+    let mut command = header::command_line(resolution.backend, &input, kind, &temp_path);
+    if let Some(url) = url {
+        command = header::from_url(url, &command);
+    }
     if cli.dry_run {
         println!("{command}");
         return Ok(());
@@ -111,11 +144,11 @@ fn run(cli: &Cli) -> Result<()> {
 
     let stdout = std::io::stdout();
     let pager = pager::select(cli.no_pager, stdout.is_terminal());
-    let stdin = StdinSource {
-        data: stdin_data.as_deref().unwrap_or_default(),
-        temp_path: &stdin_path,
+    let content = Content {
+        data: content.as_deref().unwrap_or_default(),
+        temp_path: &temp_path,
     };
-    run_backend(resolution.backend, &input, &stdin, &header, pager.as_ref())
+    run_backend(resolution.backend, &input, &content, &header, pager.as_ref())
 }
 
 /// Tipos que a detecção usa quando não reconhece o formato da entrada.
@@ -125,8 +158,8 @@ fn is_plain_text(kind: Kind) -> bool {
 
 /// Formato estruturado de uma entrada que a detecção não identificou (ex.
 /// yaml pelo stdin, ou json num arquivo sem extensão), pelo conteúdo.
-fn sniff_source(input: &Input, stdin: Option<&[u8]>) -> Option<Kind> {
-    let bytes = match (input, stdin) {
+fn sniff_source(input: &Input, content: Option<&[u8]>) -> Option<Kind> {
+    let bytes = match (input, content) {
         (_, Some(bytes)) => bytes.to_vec(),
         (Input::Target(path), None) => std::fs::read(path).ok()?,
         (Input::Stdin, None) => return None,
@@ -141,8 +174,9 @@ fn missing_target(target: Option<&str>, stdin_is_terminal: bool) -> bool {
     Input::from_arg(target) == Input::Stdin && stdin_is_terminal
 }
 
-/// Conteúdo lido do stdin e onde gravá-lo para backends que exigem caminho.
-struct StdinSource<'a> {
+/// Conteúdo em memória (stdin ou URL baixada) e onde gravá-lo para backends
+/// que exigem caminho.
+struct Content<'a> {
     data: &'a [u8],
     temp_path: &'a Path,
 }
@@ -150,33 +184,33 @@ struct StdinSource<'a> {
 fn run_backend(
     backend: &Backend,
     input: &Input,
-    stdin: &StdinSource<'_>,
+    content: &Content<'_>,
     header: &str,
     pager: &dyn pager::Pager,
 ) -> Result<()> {
     match backend {
         Backend::Internal(internal) => {
             let mut buffer = Vec::new();
-            internal.render(input, stdin.data, &mut buffer)?;
+            internal.render(input, content.data, &mut buffer)?;
             return pager.page(header, &mut buffer.as_slice());
         }
         Backend::Pipe { internal, sink } => {
             let mut buffer = Vec::new();
-            internal.render(input, stdin.data, &mut buffer)?;
-            let piped = StdinSource {
+            internal.render(input, content.data, &mut buffer)?;
+            let piped = Content {
                 data: &buffer,
-                temp_path: stdin.temp_path,
+                temp_path: content.temp_path,
             };
             return run_backend(sink, &Input::Stdin, &piped, header, pager);
         }
         Backend::External { .. } => {}
     }
     let argv = backend
-        .argv(input, stdin.temp_path)
+        .argv(input, content.temp_path)
         .expect("backend externo sempre tem argv");
     // Apagado ao sair da função, inclusive por erro.
     let _temp = (*input == Input::Stdin && backend.needs_path())
-        .then(|| stdin::TempFile::create(stdin.temp_path, stdin.data))
+        .then(|| stdin::TempFile::create(content.temp_path, content.data))
         .transpose()?;
     let pipe_stdin = *input == Input::Stdin && !backend.needs_path();
     let (program, args) = argv.split_first().expect("argv nunca é vazio");
@@ -197,7 +231,7 @@ fn run_backend(
         if let Some(mut pipe) = child.stdin.take() {
             scope.spawn(move || {
                 // Pipe quebrado: o backend não quis ler tudo.
-                let _ = pipe.write_all(stdin.data);
+                let _ = pipe.write_all(content.data);
             });
         }
         pager.page(header, &mut body)?;
