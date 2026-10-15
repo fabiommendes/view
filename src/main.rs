@@ -119,7 +119,12 @@ fn run(cli: &Cli) -> Result<()> {
     let resolution = backend::resolve(&chain, &path)
         .ok_or_else(|| anyhow!("nenhum visualizador disponível para {}", kind.name()))?;
 
-    let mut command = header::command_line(resolution.backend, &input, kind, &temp_path);
+    let mut command = header::command_line(
+        resolution.backend,
+        &input,
+        cli.format.is_some().then_some(kind),
+        &temp_path,
+    );
     if let Some(url) = url {
         command = header::from_url(url, &command);
     }

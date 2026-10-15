@@ -15,8 +15,15 @@ pub fn terminal_width() -> u16 {
 
 /// Linha `$ ...` que reproduz o que foi feito. `stdin_path` é o arquivo
 /// temporário usado por backends que exigem caminho quando a entrada é stdin.
-pub fn command_line(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {
-    format!("$ {}", command_body(backend, input, kind, stdin_path))
+/// `forced` é o formato passado pelo usuário em `--as`, se houve: só ele
+/// aparece como `--as` no comando de backends internos.
+pub fn command_line(
+    backend: &Backend,
+    input: &Input,
+    forced: Option<Kind>,
+    stdin_path: &Path,
+) -> String {
+    format!("$ {}", command_body(backend, input, forced, stdin_path))
 }
 
 /// Comando de uma URL baixada: o `curl` equivalente alimenta o comando do
@@ -35,7 +42,12 @@ pub fn from_url_unresolved(url: &str) -> String {
 
 /// Comando sem o prefixo `$ `. Num `Pipe`, o destino lê o que o renderizador
 /// interno produz, então o cabeçalho mostra o destino sem alvo.
-fn command_body(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {
+fn command_body(
+    backend: &Backend,
+    input: &Input,
+    forced: Option<Kind>,
+    stdin_path: &Path,
+) -> String {
     match backend {
         Backend::External { .. } => {
             let argv = backend
@@ -43,7 +55,7 @@ fn command_body(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path)
                 .expect("backend externo sempre tem argv");
             shell_words(&argv)
         }
-        Backend::Internal(internal) => internal_body(*internal, input, kind),
+        Backend::Internal(internal) => internal_body(*internal, input, forced),
         Backend::Pipe { internal, sink } => {
             let sink = match sink.as_ref() {
                 Backend::External { .. } => {
@@ -55,23 +67,20 @@ fn command_body(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path)
                     }
                     shell_words(&argv)
                 }
-                other => command_body(other, &Input::Stdin, kind, stdin_path),
+                other => command_body(other, &Input::Stdin, forced, stdin_path),
             };
-            format!("{} | {sink}", internal_body(*internal, input, kind))
+            format!("{} | {sink}", internal_body(*internal, input, forced))
         }
     }
 }
 
-fn internal_body(internal: Internal, input: &Input, kind: Kind) -> String {
+fn internal_body(internal: Internal, input: &Input, forced: Option<Kind>) -> String {
     let target = match input {
         Input::Stdin => "-".to_owned(),
         Input::Target(t) => shell_quote(t),
     };
-    format!(
-        "view --as {} {target}  # {}",
-        kind.name(),
-        internal.description()
-    )
+    let as_option = forced.map_or_else(String::new, |kind| format!("--as {} ", kind.name()));
+    format!("view {as_option}{target}  # {}", internal.description())
 }
 
 fn shell_words(argv: &[String]) -> String {
@@ -137,7 +146,7 @@ mod tests {
         let backend = Backend::external("bat", &["-l", "md"], None);
         let input = Input::Target("meu arquivo.md".into());
         assert_eq!(
-            command_line(&backend, &input, Kind::Markdown, Path::new("/tmp/x")),
+            command_line(&backend, &input, None, Path::new("/tmp/x")),
             "$ bat -l md 'meu arquivo.md'"
         );
     }
@@ -148,10 +157,28 @@ mod tests {
         let line = command_line(
             &backend,
             &Input::Target("a.csv".into()),
-            Kind::Csv,
+            None,
             Path::new("/tmp/x"),
         );
-        assert_eq!(line, "$ view --as csv a.csv  # csv→tabela interna");
+        assert_eq!(line, "$ view a.csv  # csv→tabela interna");
+    }
+
+    #[test]
+    fn as_option_appears_only_when_the_user_passed_it() {
+        let backend = Backend::Pipe {
+            internal: Internal::Html,
+            sink: Box::new(Backend::external("glow", &[], None)),
+        };
+        let input = Input::Target("page.html".into());
+        let tmp = Path::new("/tmp/x");
+        assert_eq!(
+            command_line(&backend, &input, None, tmp),
+            "$ view page.html  # html→md interno | glow"
+        );
+        assert_eq!(
+            command_line(&backend, &input, Some(Kind::Html), tmp),
+            "$ view --as html page.html  # html→md interno | glow"
+        );
     }
 
     #[test]
@@ -167,7 +194,7 @@ mod tests {
         let line = command_line(
             &backend,
             &Input::Target("foo.json".into()),
-            Kind::Yaml,
+            Some(Kind::Yaml),
             Path::new("/tmp/x"),
         );
         assert_eq!(
@@ -180,13 +207,10 @@ mod tests {
     fn stdin_command_line_shows_dash_or_temp_path() {
         let tmp = Path::new("/tmp/view-1");
         let bat = Backend::external("bat", &[], None);
-        assert_eq!(
-            command_line(&bat, &Input::Stdin, Kind::Text, tmp),
-            "$ bat -"
-        );
+        assert_eq!(command_line(&bat, &Input::Stdin, None, tmp), "$ bat -");
         let ls = Backend::external("ls", &["-la"], None).path_only();
         assert_eq!(
-            command_line(&ls, &Input::Stdin, Kind::Directory, tmp),
+            command_line(&ls, &Input::Stdin, None, tmp),
             "$ ls -la /tmp/view-1"
         );
     }
