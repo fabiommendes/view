@@ -1,6 +1,6 @@
 ---
 type: issue
-status: in_progress
+status: in_review
 tags: [csv]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -28,4 +28,4 @@ creator: claude
 - [x] Corte em 10 000 linhas com aviso (R3)
 - [x] Ligar à cadeia e ao cabeçalho `# csv→tabela interno`, para arquivo e conteúdo em memória (R4)
 - [x] Testes com `table.csv`, `table.tsv` e o corte
-- [ ] `README.md` e issue em `in_review`
+- [x] `README.md` e issue em `in_review`

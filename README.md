@@ -49,7 +49,8 @@ Backends internos (Rust) ainda não implementados são pulados.
 | json, yaml, toml | `bat -l <tipo>` → `cat` |
 | json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
 | html | conversão interna (`htmd`, sem script, estilo e comentário) → cadeia de markdown (`glow` → `bat -l md` → `cat`) |
-| svg, csv | interno (pendente) → `bat -l <tipo>` → `cat` |
+| csv, tsv | tabela interna (`csv` + `comfy-table`) → `bat -l csv` → `cat` |
+| svg | interno (pendente) → `bat -l svg` → `cat` |
 | url | baixa e usa a cadeia do tipo da resposta (ver abaixo) |
 | imagem, pdf, arquivo compactado, mídia | interno (pendente) |
 
@@ -72,6 +73,20 @@ $ curl -sL https://exemplo.com/dados.json | bat --color=always --paging=never --
 `-n` não faz requisição: sem `--as` imprime `$ curl -sL <url> | view -`, pois só
 a resposta diz o tipo. Erro de rede ou de status HTTP termina com uma linha,
 como `view: <url>: HTTP 404`.
+
+## CSV e TSV
+
+Arquivos `.csv` e `.tsv` (ou `text/csv` e `text/tab-separated-values` numa URL)
+viram uma tabela na largura do terminal, com a primeira linha como cabeçalho.
+O delimitador vem da extensão; sem extensão (stdin, URL), vale tab se a
+primeira linha tem tab e não tem vírgula. O stdin só é tratado como CSV com
+`--as csv`. Linhas com número de campos diferente são aceitas. Acima de 10 000
+linhas de dados, mostra as primeiras 10 000 e uma linha avisando quantas foram
+omitidas. `csvlens` e `tv` não entram na cadeia por serem interativos.
+
+```
+$ view tabela.csv  # csv→tabela interno
+```
 
 ## Conversão entre json, yaml e toml
 
