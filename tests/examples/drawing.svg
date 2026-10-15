@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120">
+  <title>Formas simples</title>
+  <rect x="10" y="10" width="60" height="40" fill="#4a90d9"/>
+  <circle cx="110" cy="40" r="25" fill="#e8553d"/>
+  <polygon points="160,10 190,60 130,60" fill="#58b368"/>
+  <text x="10" y="100" font-size="14" fill="#333">exemplo</text>
+</svg>

@@ -1,0 +1,17 @@
+# Configuração de exemplo.
+titulo = "view"
+versao = 3
+
+[servidor]
+host = "0.0.0.0"
+porta = 8080
+tls = false
+
+[banco]
+url = "postgres://localhost/app"
+pool = 10
+timeouts = [5, 10, 30]
+
+[logs]
+nivel = "info"
+arquivo = "/var/log/app.log"

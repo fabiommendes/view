@@ -1,0 +1,16 @@
+{
+  "projeto": {
+    "nome": "view",
+    "versao": 3,
+    "ativo": true,
+    "tags": ["cli", "pager", "rust"],
+    "autores": [
+      { "nome": "Ana", "contribuicoes": 42 },
+      { "nome": "Bruno", "email": "bruno@example.com", "contribuicoes": 7 }
+    ],
+    "config": {
+      "largura": 80,
+      "cores": true
+    }
+  }
+}

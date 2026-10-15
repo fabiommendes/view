@@ -1,0 +1,14 @@
+# Configuração de exemplo.
+servidor:
+  host: 0.0.0.0
+  porta: 8080
+  tls: false
+
+banco:
+  url: "postgres://localhost/app"
+  pool: 10
+  timeouts: [5, 10, 30]
+
+logs:
+  nivel: info
+  arquivo: /var/log/app.log   # comentário no fim da linha
