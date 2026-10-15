@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_progress
 tags: [url, http]
 relatedTo: [dev/rfc/mvp.md, dev/issues/html.md, dev/issues/detect-magic-bytes.md]
 kind: enhancement
@@ -21,3 +21,12 @@ creator: claude
 
 - Teste com servidor HTTP local (sem rede externa) para html, json e imagem.
 - `view -n https://example.com` não faz requisição.
+
+## Plano
+
+- [ ] Dependência `ureq` (rustls) e módulo `fetch`: download com limite de 20 MiB, timeout de 15 s, redirecionamentos e erros curtos (R1, R4).
+- [ ] Roteamento pelo `Content-Type` (`detect::from_content_type`), com `detect_bytes` quando ausente ou genérico (R2).
+- [ ] Refatoração: o conteúdo do stdin vira "conteúdo em memória" (`Content`), reaproveitado pela URL baixada.
+- [ ] `main` baixa a URL e entrega aos backends; cabeçalho `curl -sL <url> | ...`; `-n` não faz requisição (R2, R3).
+- [ ] Testes de integração com servidor HTTP local (html, json, imagem, 404) e `-n`.
+- [ ] `README.md` atualizado.
