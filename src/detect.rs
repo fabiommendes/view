@@ -29,7 +29,6 @@ pub enum Kind {
     Code,
     Markdown,
     Html,
-    Url,
     Json,
     Yaml,
     Toml,
@@ -51,7 +50,6 @@ impl Kind {
             Self::Code => "code",
             Self::Markdown => "md",
             Self::Html => "html",
-            Self::Url => "url",
             Self::Json => "json",
             Self::Yaml => "yaml",
             Self::Toml => "toml",
@@ -73,7 +71,6 @@ impl Kind {
             "code" => Self::Code,
             "md" | "markdown" => Self::Markdown,
             "html" => Self::Html,
-            "url" => Self::Url,
             "json" => Self::Json,
             "yaml" | "yml" => Self::Yaml,
             "toml" => Self::Toml,
@@ -94,15 +91,13 @@ impl Kind {
 /// Quantos bytes do início do arquivo a detecção por conteúdo examina.
 const SNIFF_LEN: usize = 8192;
 
-/// Detecta o tipo, na ordem: URL, diretório, magic bytes, extensão e, por
+/// Detecta o tipo, na ordem: diretório, magic bytes, extensão e, por
 /// último, texto ou binário pelo conteúdo.
 pub fn detect(input: &Input) -> Kind {
     match input {
         Input::Stdin => Kind::Text,
         Input::Target(target) => {
-            if is_url(target) {
-                Kind::Url
-            } else if Path::new(target).is_dir() {
+            if Path::new(target).is_dir() {
                 Kind::Directory
             } else {
                 detect_file(Path::new(target))
@@ -460,9 +455,10 @@ mod tests {
     }
 
     #[test]
-    fn url_wins_over_extension() {
-        let input = Input::Target("https://example.com/a.md".into());
-        assert_eq!(detect(&input), Kind::Url);
+    fn url_prefix_is_http_or_https() {
+        assert!(is_url("https://example.com/a.md"));
+        assert!(!is_url("a.md"));
+        assert!(!is_url("ftp://example.com"));
     }
 
     #[test]

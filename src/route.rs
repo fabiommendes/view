@@ -82,7 +82,6 @@ fn chain_for(kind: Kind, width: u16) -> Vec<Backend> {
             .collect(),
         Kind::Svg => vec![Backend::Internal(Internal::Svg), bat(Some("xml")), cat()],
         Kind::Csv => vec![Backend::Internal(Internal::Csv), bat(Some("csv")), cat()],
-        Kind::Url => vec![Backend::Internal(Internal::Url)],
         Kind::Image => vec![Backend::Internal(Internal::Image)],
         Kind::Pdf => vec![Backend::Internal(Internal::Pdf)],
         Kind::Archive => vec![Backend::Internal(Internal::Archive)],

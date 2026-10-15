@@ -19,12 +19,11 @@ pub enum Internal {
         from: Format,
         to: Format,
     },
-    /// Imagem via placeholders Unicode do kitty (ver `examples/kitty_placeholder.rs`).
+    /// Imagem interna (o spike em `examples/kitty_placeholder.rs` explora placeholders Unicode do kitty).
     Image,
     Svg,
     Html,
     Csv,
-    Url,
     Pdf,
     Archive,
     Media,
@@ -42,11 +41,10 @@ impl Internal {
             Self::Convert { from, to } => {
                 return format!("{}→{} interno", from.name(), to.name());
             }
-            Self::Image => "imagem interna via placeholders kitty",
+            Self::Image => "imagem interna",
             Self::Svg => "svg rasterizado internamente",
             Self::Html => "html→md interno",
             Self::Csv => "csv→tabela interna",
-            Self::Url => "download interno e roteamento pelo tipo da resposta",
             Self::Pdf => "pdf→texto interno",
             Self::Archive => "listagem interna do arquivo",
             Self::Media => "metadados internos da mídia",
