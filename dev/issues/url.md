@@ -1,6 +1,6 @@
 ---
 type: issue
-status: in_progress
+status: in_review
 tags: [url, http]
 relatedTo: [dev/rfc/mvp.md, dev/issues/html.md, dev/issues/detect-magic-bytes.md]
 kind: enhancement

@@ -50,10 +50,28 @@ Backends internos (Rust) ainda não implementados são pulados.
 | json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
 | html | conversão interna (`htmd`, sem script, estilo e comentário) → cadeia de markdown (`glow` → `bat -l md` → `cat`) |
 | svg, csv | interno (pendente) → `bat -l <tipo>` → `cat` |
-| url, imagem, pdf, arquivo compactado, mídia | interno (pendente) |
+| url | baixa e usa a cadeia do tipo da resposta (ver abaixo) |
+| imagem, pdf, arquivo compactado, mídia | interno (pendente) |
 
-A detecção usa diretório, prefixo `http(s)://` e extensão. Magic bytes ficam
-para depois.
+A detecção usa diretório, prefixo `http(s)://`, magic bytes, extensão e, por
+último, o conteúdo.
+
+## URLs
+
+`view https://exemplo.com/pagina` baixa com `ureq` (rustls) para a memória:
+limite de 20 MiB, timeout de 15 s, redirecionamentos seguidos. O tipo vem do
+`Content-Type`; se ele falta ou é genérico (`text/plain`,
+`application/octet-stream`, desconhecido), vale a detecção pelo conteúdo, como
+no stdin. Depois o conteúdo segue o caminho do stdin (pipe ou arquivo
+temporário). O cabeçalho mostra o equivalente:
+
+```
+$ curl -sL https://exemplo.com/dados.json | bat --color=always --paging=never --style=plain -l json -
+```
+
+`-n` não faz requisição: sem `--as` imprime `$ curl -sL <url> | view -`, pois só
+a resposta diz o tipo. Erro de rede ou de status HTTP termina com uma linha,
+como `view: <url>: HTTP 404`.
 
 ## Conversão entre json, yaml e toml
 
