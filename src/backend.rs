@@ -4,11 +4,20 @@ use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
+use anyhow::Context;
+
+use crate::convert::{self, Format};
 use crate::detect::Input;
 
-/// Renderizadores escritos em Rust, ainda não implementados.
+/// Renderizadores escritos em Rust. Os ainda não implementados ficam fora da
+/// resolução (ver `is_implemented`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Internal {
+    /// Converte entre json, yaml e toml.
+    Convert {
+        from: Format,
+        to: Format,
+    },
     /// Imagem via placeholders Unicode do kitty (ver `examples/kitty_placeholder.rs`).
     Image,
     Svg,
@@ -23,12 +32,15 @@ pub enum Internal {
 impl Internal {
     /// Enquanto for `false`, a resolução pula o backend.
     pub const fn is_implemented(self) -> bool {
-        false
+        matches!(self, Self::Convert { .. })
     }
 
     /// Descrição curta para o cabeçalho.
-    pub const fn description(self) -> &'static str {
-        match self {
+    pub fn description(self) -> String {
+        let text = match self {
+            Self::Convert { from, to } => {
+                return format!("{}→{} interno", from.name(), to.name());
+            }
             Self::Image => "imagem interna via placeholders kitty",
             Self::Svg => "svg rasterizado internamente",
             Self::Html => "html→texto interno",
@@ -37,12 +49,37 @@ impl Internal {
             Self::Pdf => "pdf→texto interno",
             Self::Archive => "listagem interna do arquivo",
             Self::Media => "metadados internos da mídia",
-        }
+        };
+        text.to_owned()
     }
 
-    /// Escreve a renderização de `input` em `out`.
-    pub fn render(self, _input: &Input, _out: &mut dyn std::io::Write) -> anyhow::Result<()> {
-        todo!("renderizador interno {self:?}")
+    /// Escreve a renderização de `input` em `out`. `stdin` é o conteúdo já
+    /// lido quando `input` é o stdin.
+    pub fn render(
+        self,
+        input: &Input,
+        stdin: &[u8],
+        out: &mut dyn std::io::Write,
+    ) -> anyhow::Result<()> {
+        match self {
+            Self::Convert { from, to } => {
+                let bytes = source_bytes(input, stdin)?;
+                let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
+                out.write_all(convert::convert(&text, from, to)?.as_bytes())?;
+                Ok(())
+            }
+            _ => todo!("renderizador interno {self:?}"),
+        }
+    }
+}
+
+/// Bytes da entrada: o conteúdo do stdin ou o arquivo.
+fn source_bytes(input: &Input, stdin: &[u8]) -> anyhow::Result<Vec<u8>> {
+    match input {
+        Input::Stdin => Ok(stdin.to_vec()),
+        Input::Target(path) => {
+            std::fs::read(path).with_context(|| format!("não foi possível ler {path}"))
+        }
     }
 }
 
@@ -58,6 +95,12 @@ pub enum Backend {
         needs_path: bool,
     },
     Internal(Internal),
+    /// Renderizador interno cuja saída vira o stdin de outro backend
+    /// (ex. `json→yaml` interno e depois `bat -l yaml`).
+    Pipe {
+        internal: Internal,
+        sink: Box<Backend>,
+    },
 }
 
 impl Backend {
@@ -86,6 +129,7 @@ impl Backend {
         match self {
             Self::External { program, .. } => in_path(program, path),
             Self::Internal(internal) => internal.is_implemented(),
+            Self::Pipe { internal, sink } => internal.is_implemented() && sink.is_available(path),
         }
     }
 
@@ -100,7 +144,7 @@ impl Backend {
         )
     }
 
-    /// Programa e argumentos a executar; `None` para backend interno.
+    /// Programa e argumentos a executar; `None` para backend interno ou `Pipe`.
     ///
     /// Para stdin, o último argumento é `-` ou, se o backend exige caminho,
     /// `stdin_path` (o arquivo temporário com o conteúdo).

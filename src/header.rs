@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::backend::{Backend, Resolution};
+use crate::backend::{Backend, Internal, Resolution};
 use crate::detect::{Input, Kind};
 
 const DIM: &str = "\x1b[2m";
@@ -16,22 +16,53 @@ pub fn terminal_width() -> u16 {
 /// Linha `$ ...` que reproduz o que foi feito. `stdin_path` é o arquivo
 /// temporário usado por backends que exigem caminho quando a entrada é stdin.
 pub fn command_line(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {
-    if let Some(argv) = backend.argv(input, stdin_path) {
-        let words: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
-        return format!("$ {}", words.join(" "));
+    format!("$ {}", command_body(backend, input, kind, stdin_path))
+}
+
+/// Comando sem o prefixo `$ `. Num `Pipe`, o destino lê o que o renderizador
+/// interno produz, então o cabeçalho mostra o destino sem alvo.
+fn command_body(backend: &Backend, input: &Input, kind: Kind, stdin_path: &Path) -> String {
+    match backend {
+        Backend::External { .. } => {
+            let argv = backend
+                .argv(input, stdin_path)
+                .expect("backend externo sempre tem argv");
+            shell_words(&argv)
+        }
+        Backend::Internal(internal) => internal_body(*internal, input, kind),
+        Backend::Pipe { internal, sink } => {
+            let sink = match sink.as_ref() {
+                Backend::External { .. } => {
+                    let mut argv = sink
+                        .argv(&Input::Stdin, stdin_path)
+                        .expect("backend externo sempre tem argv");
+                    if !sink.needs_path() {
+                        argv.pop();
+                    }
+                    shell_words(&argv)
+                }
+                other => command_body(other, &Input::Stdin, kind, stdin_path),
+            };
+            format!("{} | {sink}", internal_body(*internal, input, kind))
+        }
     }
-    let Backend::Internal(internal) = backend else {
-        unreachable!("argv só é None para backend interno");
-    };
+}
+
+fn internal_body(internal: Internal, input: &Input, kind: Kind) -> String {
     let target = match input {
         Input::Stdin => "-".to_owned(),
         Input::Target(t) => shell_quote(t),
     };
     format!(
-        "$ view --as {} {target}  # {}",
+        "view --as {} {target}  # {}",
         kind.name(),
         internal.description()
     )
+}
+
+fn shell_words(argv: &[String]) -> String {
+    let words: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
+    words.join(" ")
 }
 
 /// Sugestão de instalação quando a cadeia caiu num fallback.
@@ -71,7 +102,6 @@ fn shell_quote(word: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::Internal;
 
     #[test]
     fn render_has_command_ruler_and_dim() {
@@ -108,6 +138,28 @@ mod tests {
             Path::new("/tmp/x"),
         );
         assert_eq!(line, "$ view --as csv a.csv  # csv→tabela interna");
+    }
+
+    #[test]
+    fn pipe_command_line_shows_internal_step_then_sink_without_target() {
+        use crate::convert::Format;
+        let backend = Backend::Pipe {
+            internal: Internal::Convert {
+                from: Format::Json,
+                to: Format::Yaml,
+            },
+            sink: Box::new(Backend::external("bat", &["-l", "yaml"], None)),
+        };
+        let line = command_line(
+            &backend,
+            &Input::Target("foo.json".into()),
+            Kind::Yaml,
+            Path::new("/tmp/x"),
+        );
+        assert_eq!(
+            line,
+            "$ view --as yaml foo.json  # json→yaml interno | bat -l yaml"
+        );
     }
 
     #[test]

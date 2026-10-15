@@ -1,6 +1,7 @@
 //! `view`: roteia um arquivo, URL ou stdin para o visualizador certo.
 
 mod backend;
+mod convert;
 mod detect;
 mod header;
 mod pager;
@@ -15,6 +16,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::{CommandFactory, Parser};
 
 use crate::backend::Backend;
+use crate::convert::Format;
 use crate::detect::{Input, Kind};
 
 #[derive(Parser, Debug)]
@@ -68,14 +70,24 @@ fn run(cli: &Cli) -> Result<()> {
     let stdin_data = (input == Input::Stdin && !(cli.dry_run && cli.format.is_some()))
         .then(stdin::read_all)
         .transpose()?;
-    let kind = match (&cli.format, &stdin_data) {
-        (Some(name), _) => Kind::from_name(name)?,
-        (None, Some(bytes)) => detect::detect_bytes(bytes),
-        (None, None) => detect::detect(&input),
+    // Formato da entrada, se conhecido (sem conteúdo, o `-n` no stdin não sabe).
+    let source = match &stdin_data {
+        Some(bytes) => Some(detect::detect_bytes(bytes)),
+        None if input == Input::Stdin => None,
+        None => Some(detect::detect(&input)),
+    };
+    let kind = match &cli.format {
+        Some(name) => Kind::from_name(name)?,
+        None => source.unwrap_or(Kind::Text),
+    };
+    let source = if Format::from_kind(kind).is_some() && source.is_some_and(is_plain_text) {
+        sniff_source(&input, stdin_data.as_deref()).or(source)
+    } else {
+        source
     };
     let stdin_path = stdin::temp_path();
     let width = header::terminal_width();
-    let chain = route::chain(kind, width);
+    let chain = route::chain(kind, source, width);
     let path = std::env::var_os("PATH").unwrap_or_default();
     let resolution = backend::resolve(&chain, &path)
         .ok_or_else(|| anyhow!("nenhum visualizador disponível para {}", kind.name()))?;
@@ -105,6 +117,23 @@ fn run(cli: &Cli) -> Result<()> {
     run_backend(resolution.backend, &input, &stdin, &header, pager.as_ref())
 }
 
+/// Tipos que a detecção usa quando não reconhece o formato da entrada.
+fn is_plain_text(kind: Kind) -> bool {
+    matches!(kind, Kind::Text | Kind::Code)
+}
+
+/// Formato estruturado de uma entrada que a detecção não identificou (ex.
+/// yaml pelo stdin, ou json num arquivo sem extensão), pelo conteúdo.
+fn sniff_source(input: &Input, stdin: Option<&[u8]>) -> Option<Kind> {
+    let bytes = match (input, stdin) {
+        (_, Some(bytes)) => bytes.to_vec(),
+        (Input::Target(path), None) => std::fs::read(path).ok()?,
+        (Input::Stdin, None) => return None,
+    };
+    let format = convert::sniff(std::str::from_utf8(&bytes).ok()?)?;
+    Some(format.kind())
+}
+
 /// Sem alvo (ou `-`) e com o stdin num terminal, ler o stdin bloqueia esperando
 /// o usuário digitar, então o caso é recusado antes da leitura.
 fn missing_target(target: Option<&str>, stdin_is_terminal: bool) -> bool {
@@ -124,14 +153,26 @@ fn run_backend(
     header: &str,
     pager: &dyn pager::Pager,
 ) -> Result<()> {
-    let Some(argv) = backend.argv(input, stdin.temp_path) else {
-        let Backend::Internal(internal) = backend else {
-            unreachable!("argv só é None para backend interno");
-        };
-        let mut buffer = Vec::new();
-        internal.render(input, &mut buffer)?;
-        return pager.page(header, &mut buffer.as_slice());
-    };
+    match backend {
+        Backend::Internal(internal) => {
+            let mut buffer = Vec::new();
+            internal.render(input, stdin.data, &mut buffer)?;
+            return pager.page(header, &mut buffer.as_slice());
+        }
+        Backend::Pipe { internal, sink } => {
+            let mut buffer = Vec::new();
+            internal.render(input, stdin.data, &mut buffer)?;
+            let piped = StdinSource {
+                data: &buffer,
+                temp_path: stdin.temp_path,
+            };
+            return run_backend(sink, &Input::Stdin, &piped, header, pager);
+        }
+        Backend::External { .. } => {}
+    }
+    let argv = backend
+        .argv(input, stdin.temp_path)
+        .expect("backend externo sempre tem argv");
     // Apagado ao sair da função, inclusive por erro.
     let _temp = (*input == Input::Stdin && backend.needs_path())
         .then(|| stdin::TempFile::create(stdin.temp_path, stdin.data))

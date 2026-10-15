@@ -1,6 +1,7 @@
 //! Mapa `Kind` → cadeia ordenada de backends.
 
 use crate::backend::{Backend, Internal};
+use crate::convert::Format;
 use crate::detect::Kind;
 
 const BAT_HINT: Option<&str> = Some("pacman -S bat");
@@ -18,7 +19,29 @@ fn cat() -> Backend {
 }
 
 /// Cadeia de backends para `kind`; `width` é a largura do terminal.
-pub fn chain(kind: Kind, width: u16) -> Vec<Backend> {
+///
+/// `source` é o formato real da entrada, quando conhecido. Se ele e `kind`
+/// são formatos estruturados diferentes, cada backend da cadeia de `kind`
+/// passa a receber a entrada convertida.
+pub fn chain(kind: Kind, source: Option<Kind>, width: u16) -> Vec<Backend> {
+    let chain = chain_for(kind, width);
+    let conversion = source
+        .and_then(Format::from_kind)
+        .zip(Format::from_kind(kind))
+        .filter(|(from, to)| from != to);
+    let Some((from, to)) = conversion else {
+        return chain;
+    };
+    chain
+        .into_iter()
+        .map(|sink| Backend::Pipe {
+            internal: Internal::Convert { from, to },
+            sink: Box::new(sink),
+        })
+        .collect()
+}
+
+fn chain_for(kind: Kind, width: u16) -> Vec<Backend> {
     match kind {
         Kind::Code | Kind::Text => vec![bat(None), cat()],
         Kind::Markdown => vec![
@@ -66,22 +89,57 @@ mod tests {
             .iter()
             .filter_map(|b| match b {
                 Backend::External { program, .. } => Some(*program),
-                Backend::Internal(_) => None,
+                Backend::Internal(_) | Backend::Pipe { .. } => None,
             })
             .collect()
     }
 
     #[test]
     fn mvp_chains() {
-        assert_eq!(programs(&chain(Kind::Code, 80)), ["bat", "cat"]);
-        assert_eq!(programs(&chain(Kind::Markdown, 80)), ["glow", "bat", "cat"]);
-        assert_eq!(programs(&chain(Kind::Directory, 80)), ["eza", "ls"]);
-        assert_eq!(programs(&chain(Kind::Binary, 80)), ["hexyl", "xxd"]);
+        assert_eq!(programs(&chain(Kind::Code, None, 80)), ["bat", "cat"]);
+        assert_eq!(
+            programs(&chain(Kind::Markdown, None, 80)),
+            ["glow", "bat", "cat"]
+        );
+        assert_eq!(programs(&chain(Kind::Directory, None, 80)), ["eza", "ls"]);
+        assert_eq!(programs(&chain(Kind::Binary, None, 80)), ["hexyl", "xxd"]);
+    }
+
+    #[test]
+    fn structured_conversion_pipes_into_the_target_chain() {
+        let chain = chain(Kind::Yaml, Some(Kind::Json), 80);
+        assert_eq!(chain.len(), 2);
+        let convert = Internal::Convert {
+            from: Format::Json,
+            to: Format::Yaml,
+        };
+        for backend in &chain {
+            let Backend::Pipe { internal, .. } = backend else {
+                panic!("esperava Pipe");
+            };
+            assert_eq!(*internal, convert);
+        }
+        let Backend::Pipe { sink, .. } = &chain[0] else {
+            unreachable!()
+        };
+        assert_eq!(**sink, bat(Some("yaml")));
+    }
+
+    #[test]
+    fn same_or_non_structured_source_does_not_convert() {
+        let plain = chain_for(Kind::Yaml, 80);
+        assert_eq!(chain(Kind::Yaml, Some(Kind::Yaml), 80), plain);
+        assert_eq!(chain(Kind::Yaml, None, 80), plain);
+        assert_eq!(chain(Kind::Yaml, Some(Kind::Text), 80), plain);
+        assert_eq!(
+            chain(Kind::Code, Some(Kind::Json), 80),
+            chain_for(Kind::Code, 80)
+        );
     }
 
     #[test]
     fn glow_gets_terminal_width() {
-        let Backend::External { args, .. } = &chain(Kind::Markdown, 97)[0] else {
+        let Backend::External { args, .. } = &chain(Kind::Markdown, None, 97)[0] else {
             panic!("esperava backend externo");
         };
         assert_eq!(args.last().unwrap(), "97");
