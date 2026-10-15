@@ -8,6 +8,7 @@ use anyhow::Context;
 
 use crate::convert::{self, Format};
 use crate::detect::Input;
+use crate::html;
 
 /// Renderizadores escritos em Rust. Os ainda não implementados ficam fora da
 /// resolução (ver `is_implemented`).
@@ -32,7 +33,7 @@ pub enum Internal {
 impl Internal {
     /// Enquanto for `false`, a resolução pula o backend.
     pub const fn is_implemented(self) -> bool {
-        matches!(self, Self::Convert { .. })
+        matches!(self, Self::Convert { .. } | Self::Html)
     }
 
     /// Descrição curta para o cabeçalho.
@@ -43,7 +44,7 @@ impl Internal {
             }
             Self::Image => "imagem interna via placeholders kitty",
             Self::Svg => "svg rasterizado internamente",
-            Self::Html => "html→texto interno",
+            Self::Html => "html→md interno",
             Self::Csv => "csv→tabela interna",
             Self::Url => "download interno e roteamento pelo tipo da resposta",
             Self::Pdf => "pdf→texto interno",
@@ -66,6 +67,12 @@ impl Internal {
                 let bytes = source_bytes(input, stdin)?;
                 let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
                 out.write_all(convert::convert(&text, from, to)?.as_bytes())?;
+                Ok(())
+            }
+            Self::Html => {
+                let bytes = source_bytes(input, stdin)?;
+                let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
+                out.write_all(html::to_markdown(&text)?.as_bytes())?;
                 Ok(())
             }
             _ => todo!("renderizador interno {self:?}"),

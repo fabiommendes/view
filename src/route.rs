@@ -41,18 +41,22 @@ pub fn chain(kind: Kind, source: Option<Kind>, width: u16) -> Vec<Backend> {
         .collect()
 }
 
+fn markdown_chain(width: u16) -> Vec<Backend> {
+    vec![
+        Backend::external(
+            "glow",
+            &["-s", "dark", "-w", &width.to_string()],
+            Some("pacman -S glow"),
+        ),
+        bat(Some("md")),
+        cat(),
+    ]
+}
+
 fn chain_for(kind: Kind, width: u16) -> Vec<Backend> {
     match kind {
         Kind::Code | Kind::Text => vec![bat(None), cat()],
-        Kind::Markdown => vec![
-            Backend::external(
-                "glow",
-                &["-s", "dark", "-w", &width.to_string()],
-                Some("pacman -S glow"),
-            ),
-            bat(Some("md")),
-            cat(),
-        ],
+        Kind::Markdown => markdown_chain(width),
         Kind::Directory => vec![
             Backend::external(
                 "eza",
@@ -69,7 +73,13 @@ fn chain_for(kind: Kind, width: u16) -> Vec<Backend> {
         Kind::Json => vec![bat(Some("json")), cat()],
         Kind::Yaml => vec![bat(Some("yaml")), cat()],
         Kind::Toml => vec![bat(Some("toml")), cat()],
-        Kind::Html => vec![Backend::Internal(Internal::Html), bat(Some("html")), cat()],
+        Kind::Html => markdown_chain(width)
+            .into_iter()
+            .map(|sink| Backend::Pipe {
+                internal: Internal::Html,
+                sink: Box::new(sink),
+            })
+            .collect(),
         Kind::Svg => vec![Backend::Internal(Internal::Svg), bat(Some("xml")), cat()],
         Kind::Csv => vec![Backend::Internal(Internal::Csv), bat(Some("csv")), cat()],
         Kind::Url => vec![Backend::Internal(Internal::Url)],
@@ -135,6 +145,24 @@ mod tests {
             chain(Kind::Code, Some(Kind::Json), 80),
             chain_for(Kind::Code, 80)
         );
+    }
+
+    #[test]
+    fn html_pipes_internal_markdown_into_the_markdown_chain() {
+        let chain = chain(Kind::Html, None, 80);
+        let markdown = chain_for(Kind::Markdown, 80);
+        assert_eq!(chain.len(), markdown.len());
+        for (backend, sink) in chain.iter().zip(&markdown) {
+            let Backend::Pipe {
+                internal,
+                sink: got,
+            } = backend
+            else {
+                panic!("esperava Pipe");
+            };
+            assert_eq!(*internal, Internal::Html);
+            assert_eq!(**got, *sink);
+        }
     }
 
     #[test]

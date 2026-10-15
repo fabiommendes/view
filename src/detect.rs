@@ -118,9 +118,23 @@ pub fn detect(input: &Input) -> Kind {
 pub fn detect_bytes(bytes: &[u8]) -> Kind {
     let head = &bytes[..bytes.len().min(SNIFF_LEN)];
     match from_magic(head).unwrap_or_else(|| from_content(head)) {
+        Kind::Text if looks_like_html(head) => Kind::Html,
         Kind::Text => sniff_structured(head).unwrap_or(Kind::Text),
         kind => kind,
     }
+}
+
+/// HTML começa (depois de espaços) com `<!doctype html` ou `<html`, sem
+/// diferenciar maiúsculas.
+fn looks_like_html(head: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(head);
+    let start: String = text
+        .trim_start()
+        .chars()
+        .take(14)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    start.starts_with("<!doctype html") || start.starts_with("<html")
 }
 
 /// Heurística barata, sem parser: JSON começa com `{` ou com `[` seguido de
@@ -451,6 +465,16 @@ mod tests {
         assert_eq!(detect_bytes(&json), Kind::Json);
         assert_eq!(detect_bytes(b"  [1, 2]\n"), Kind::Json);
         assert_eq!(detect_bytes(b"[\"a\"]"), Kind::Json);
+    }
+
+    #[test]
+    fn html_bytes_are_sniffed_by_the_start() {
+        let page = example_bytes_text("page.html");
+        assert_eq!(detect_bytes(&page), Kind::Html);
+        assert_eq!(detect_bytes(b"\n  <HTML lang=pt>"), Kind::Html);
+        assert_eq!(detect_bytes(b"<!DocType HTML>"), Kind::Html);
+        assert_eq!(detect_bytes(b"<p>solto</p>"), Kind::Text);
+        assert_eq!(detect_bytes(b"texto <html> no meio"), Kind::Text);
     }
 
     #[test]
