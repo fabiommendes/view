@@ -9,6 +9,7 @@ mod html;
 mod pager;
 mod route;
 mod stdin;
+mod table;
 
 use std::io::{IsTerminal, Write};
 use std::path::Path;
@@ -148,6 +149,7 @@ fn run(cli: &Cli) -> Result<()> {
     let content = Content {
         data: content.as_deref().unwrap_or_default(),
         temp_path: &temp_path,
+        width,
     };
     run_backend(
         resolution.backend,
@@ -186,6 +188,8 @@ fn missing_target(target: Option<&str>, stdin_is_terminal: bool) -> bool {
 struct Content<'a> {
     data: &'a [u8],
     temp_path: &'a Path,
+    /// Largura do terminal.
+    width: u16,
 }
 
 fn run_backend(
@@ -198,15 +202,16 @@ fn run_backend(
     match backend {
         Backend::Internal(internal) => {
             let mut buffer = Vec::new();
-            internal.render(input, content.data, &mut buffer)?;
+            internal.render(input, content.data, content.width, &mut buffer)?;
             return pager.page(header, &mut buffer.as_slice());
         }
         Backend::Pipe { internal, sink } => {
             let mut buffer = Vec::new();
-            internal.render(input, content.data, &mut buffer)?;
+            internal.render(input, content.data, content.width, &mut buffer)?;
             let piped = Content {
                 data: &buffer,
                 temp_path: content.temp_path,
+                width: content.width,
             };
             return run_backend(sink, &Input::Stdin, &piped, header, pager);
         }

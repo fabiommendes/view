@@ -9,6 +9,7 @@ use anyhow::Context;
 use crate::convert::{self, Format};
 use crate::detect::Input;
 use crate::html;
+use crate::table;
 
 /// Renderizadores escritos em Rust. Os ainda não implementados ficam fora da
 /// resolução (ver `is_implemented`).
@@ -32,7 +33,7 @@ pub enum Internal {
 impl Internal {
     /// Enquanto for `false`, a resolução pula o backend.
     pub const fn is_implemented(self) -> bool {
-        matches!(self, Self::Convert { .. } | Self::Html)
+        matches!(self, Self::Convert { .. } | Self::Html | Self::Csv)
     }
 
     /// Descrição curta para o cabeçalho.
@@ -44,7 +45,7 @@ impl Internal {
             Self::Image => "imagem interna",
             Self::Svg => "svg rasterizado internamente",
             Self::Html => "html→md interno",
-            Self::Csv => "csv→tabela interna",
+            Self::Csv => "csv→tabela interno",
             Self::Pdf => "pdf→texto interno",
             Self::Archive => "listagem interna do arquivo",
             Self::Media => "metadados internos da mídia",
@@ -53,11 +54,13 @@ impl Internal {
     }
 
     /// Escreve a renderização de `input` em `out`. `content` é o conteúdo já
-    /// em memória (stdin ou URL baixada) quando `input` é `Input::Stdin`.
+    /// em memória (stdin ou URL baixada) quando `input` é `Input::Stdin`;
+    /// `width` é a largura do terminal.
     pub fn render(
         self,
         input: &Input,
         content: &[u8],
+        width: u16,
         out: &mut dyn std::io::Write,
     ) -> anyhow::Result<()> {
         match self {
@@ -71,6 +74,16 @@ impl Internal {
                 let bytes = source_bytes(input, content)?;
                 let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
                 out.write_all(html::to_markdown(&text)?.as_bytes())?;
+                Ok(())
+            }
+            Self::Csv => {
+                let bytes = source_bytes(input, content)?;
+                let name = match input {
+                    Input::Target(path) => Some(path.as_str()),
+                    Input::Stdin => None,
+                };
+                let delimiter = table::delimiter(name, &bytes);
+                out.write_all(table::render(&bytes, delimiter, width)?.as_bytes())?;
                 Ok(())
             }
             _ => todo!("renderizador interno {self:?}"),

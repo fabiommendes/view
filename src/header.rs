@@ -160,7 +160,7 @@ mod tests {
             None,
             Path::new("/tmp/x"),
         );
-        assert_eq!(line, "$ view a.csv  # csv→tabela interna");
+        assert_eq!(line, "$ view a.csv  # csv→tabela interno");
     }
 
     #[test]

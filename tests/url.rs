@@ -22,6 +22,12 @@ fn respond(path: &str) -> (u16, Option<&'static str>, Option<String>, Vec<u8>) {
             example("page.html"),
         ),
         "/data.json" => (200, Some("application/json"), None, example("data.json")),
+        "/table" => (
+            200,
+            Some("text/csv; charset=utf-8"),
+            None,
+            example("table.csv"),
+        ),
         "/image.png" => (200, Some("image/png"), None, example("image.png")),
         // Sem tipo útil: o conteúdo decide.
         "/untyped-html" => (200, None, None, example("page.html")),
@@ -234,4 +240,15 @@ fn dry_run_example_com_is_offline() {
     let out = view(&["-n", "https://example.com"]);
     assert!(out.status.success(), "{out:?}");
     assert!(stdout_of(&out).starts_with("$ curl -sL https://example.com | "));
+}
+
+#[test]
+fn csv_content_type_is_rendered_as_a_table() {
+    let out = fetch("/table", &["-q"]);
+    assert!(out.status.success());
+    let text = stdout_of(&out);
+    assert!(
+        text.contains("┌") && text.contains("Belo Horizonte, MG"),
+        "{text}"
+    );
 }

@@ -510,3 +510,107 @@ mod html {
         );
     }
 }
+
+mod csv {
+    use super::*;
+
+    /// Saída de `view --no-pager -q` sobre um exemplo.
+    fn table_of(example: &str) -> String {
+        let out = view()
+            .args(["--no-pager", "-q", &format!("{EXAMPLES}/{example}")])
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        stdout_of(&out)
+    }
+
+    #[test]
+    fn csv_is_a_table_with_the_quoted_comma_in_one_cell() {
+        let text = table_of("table.csv");
+        assert!(text.contains("┌"), "{text}");
+        assert!(text.contains("Belo Horizonte, MG"), "{text}");
+        // Cabeçalho + 4 linhas de dados.
+        let row_lines = text.lines().filter(|l| l.starts_with('│')).count();
+        assert_eq!(row_lines, 5);
+    }
+
+    #[test]
+    fn tsv_is_a_table_split_on_tabs() {
+        let text = table_of("table.tsv");
+        assert!(text.contains("Belo Horizonte"), "{text}");
+        assert!(text.contains("valor"));
+        assert!(!text.contains('\t'));
+    }
+
+    #[test]
+    fn header_says_csv_table_without_a_made_up_as() {
+        let out = view()
+            .args(["-n", &format!("{EXAMPLES}/table.csv")])
+            .output()
+            .unwrap();
+        let text = stdout_of(&out);
+        assert!(text.starts_with("$ view "), "{text}");
+        assert!(!text.contains("--as"), "{text}");
+        assert!(text.contains("# csv→tabela interno"), "{text}");
+    }
+
+    #[test]
+    fn stdin_is_not_guessed_as_csv_without_as() {
+        let out = view_stdin(&["--no-pager", "-q"], &example_bytes("table.csv"));
+        assert!(!stdout_of(&out).contains('┌'));
+    }
+
+    #[test]
+    fn stdin_with_as_csv_or_tsv_is_a_table() {
+        let out = view_stdin(
+            &["--no-pager", "-q", "--as", "csv"],
+            &example_bytes("table.csv"),
+        );
+        assert!(stdout_of(&out).contains("Belo Horizonte, MG"));
+        let out = view_stdin(
+            &["--no-pager", "-q", "--as", "csv"],
+            &example_bytes("table.tsv"),
+        );
+        let text = stdout_of(&out);
+        assert!(
+            text.contains("Porto Alegre") && !text.contains('\t'),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn table_fits_the_terminal_width() {
+        let long = format!("a,b\n{},{}\n", "x".repeat(200), "y".repeat(200));
+        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], long.as_bytes());
+        for line in stdout_of(&out).lines() {
+            assert!(line.chars().count() <= 80, "{line}");
+        }
+    }
+
+    #[test]
+    fn more_than_10000_rows_are_cut_with_a_notice() {
+        let mut data = String::from("n\n");
+        for i in 0..10_005 {
+            data.push_str(&format!("linha{i}\n"));
+        }
+        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], data.as_bytes());
+        let text = stdout_of(&out);
+        assert!(text.contains("linha9999 "), "fim das 10000 linhas");
+        assert!(!text.contains("linha10000"));
+        assert!(
+            text.contains("10000 linhas mostradas, 5 omitidas"),
+            "{}",
+            text.lines().last().unwrap()
+        );
+    }
+
+    #[test]
+    fn exactly_10000_rows_have_no_notice() {
+        let mut data = String::from("n\n");
+        for i in 0..10_000 {
+            data.push_str(&format!("{i}\n"));
+        }
+        let out = view_stdin(&["--no-pager", "-q", "--as", "csv"], data.as_bytes());
+        assert!(!stdout_of(&out).contains("omitidas"));
+    }
+}
