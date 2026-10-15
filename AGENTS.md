@@ -33,6 +33,7 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 ## Regras
 
 - Backends externos escrevem com cor num pipe que alimenta o nosso pager; nunca ative o pager deles.
+- Json passa por `Convert { Json, Json }` (reformata) salvo `--raw`; json inválido cai no `bat` cru (`main::is_valid_json`).
 - Imagem não passa pelo pager: `Internal::writes_to_terminal` marca renderizadores que escrevem direto no stdout, depois do cabeçalho. Veja `dev/notes/kitty-placeholders.md`.
 - Renderizadores internos (`backend::Internal`) ficam fora da resolução enquanto `is_implemented` for `false`. Ao implementar um, troque o `todo!()` e o `is_implemented`.
 - Toda cadeia nova em `route.rs` vem com teste e entra na tabela do `README.md`.

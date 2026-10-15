@@ -44,6 +44,10 @@ struct Cli {
     #[arg(long = "as", value_name = "FORMAT")]
     format: Option<String>,
 
+    /// Mostra o json como está, sem reformatar.
+    #[arg(long)]
+    raw: bool,
+
     /// Escreve direto no stdout, sem pager.
     #[arg(long)]
     no_pager: bool,
@@ -109,20 +113,43 @@ fn run(cli: &Cli) -> Result<()> {
         Some(name) => Kind::from_name(name)?,
         None => source.unwrap_or(Kind::Text),
     };
-    let source = if Format::from_kind(kind).is_some() && source.is_some_and(is_plain_text) {
+    if cli.raw && cli.format.is_some() && kind != Kind::Json {
+        bail!("--raw só vale para json, mas --as pede {}", kind.name());
+    }
+    let source = if Format::from_kind(kind).is_some()
+        && source.is_some_and(is_plain_text)
+        && !is_json_lines(&input)
+    {
         sniff_source(&input, content.as_deref()).or(source)
     } else {
         source
     };
     let temp_path = stdin::temp_path();
     let width = header::terminal_width();
-    let chain = route::chain(kind, source, width);
+    let chain = route::chain(kind, source, width, cli.raw);
     let path = std::env::var_os("PATH").unwrap_or_default();
     let resolution = backend::resolve(&chain, &path)
         .ok_or_else(|| anyhow!("nenhum visualizador disponível para {}", kind.name()))?;
 
+    // Json inválido não é erro: mostra o texto como está, sem a conversão.
+    let mut backend = resolution.backend;
+    let mut invalid_json = false;
+    if let Backend::Pipe { internal, sink } = backend
+        && matches!(
+            internal,
+            Internal::Convert {
+                from: Format::Json,
+                to: Format::Json
+            }
+        )
+        && !is_valid_json(&input, content.as_deref())
+    {
+        backend = sink;
+        invalid_json = true;
+    }
+
     let mut command = header::command_line(
-        resolution.backend,
+        backend,
         &input,
         cli.format.is_some().then_some(kind),
         &temp_path,
@@ -144,8 +171,11 @@ fn run(cli: &Cli) -> Result<()> {
             .flatten()
             .into_iter()
             .collect();
-        if matches!(resolution.backend, Backend::Internal(Internal::Image)) {
+        if matches!(backend, Backend::Internal(Internal::Image)) {
             notes.push(format!("# imagem: {}", image_protocol.name()));
+        }
+        if invalid_json {
+            notes.push("# json inválido: mostrado como está".to_owned());
         }
         header::render(&command, &notes, usize::from(width))
     } else {
@@ -159,13 +189,7 @@ fn run(cli: &Cli) -> Result<()> {
         width,
         image_protocol,
     };
-    run_backend(
-        resolution.backend,
-        &input,
-        &content,
-        &header,
-        pager.as_ref(),
-    )
+    run_backend(backend, &input, &content, &header, pager.as_ref())
 }
 
 /// Tipos que a detecção usa quando não reconhece o formato da entrada.
@@ -183,6 +207,29 @@ fn sniff_source(input: &Input, content: Option<&[u8]>) -> Option<Kind> {
     };
     let format = convert::sniff(std::str::from_utf8(&bytes).ok()?)?;
     Some(format.kind())
+}
+
+/// JSON Lines não é um documento json: fica como está.
+fn is_json_lines(input: &Input) -> bool {
+    matches!(input, Input::Target(path)
+    if Path::new(path).extension().is_some_and(|ext| {
+        ext.eq_ignore_ascii_case("jsonl") || ext.eq_ignore_ascii_case("ndjson")
+    }))
+}
+
+/// Se a entrada é json válido. Entrada ilegível conta como válida, para o
+/// erro de leitura aparecer no backend.
+fn is_valid_json(input: &Input, content: Option<&[u8]>) -> bool {
+    let bytes = match (input, content) {
+        (_, Some(bytes)) => bytes.to_vec(),
+        (Input::Target(path), None) => match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(_) => return true,
+        },
+        (Input::Stdin, None) => return true,
+    };
+    std::str::from_utf8(&bytes)
+        .is_ok_and(|text| convert::convert(text, Format::Json, Format::Json).is_ok())
 }
 
 /// Sem alvo (ou `-`) e com o stdin num terminal, ler o stdin bloqueia esperando

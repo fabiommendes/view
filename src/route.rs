@@ -22,13 +22,18 @@ fn cat() -> Backend {
 ///
 /// `source` é o formato real da entrada, quando conhecido. Se ele e `kind`
 /// são formatos estruturados diferentes, cada backend da cadeia de `kind`
-/// passa a receber a entrada convertida.
-pub fn chain(kind: Kind, source: Option<Kind>, width: u16) -> Vec<Backend> {
+/// passa a receber a entrada convertida. Json sem `raw` passa pela conversão
+/// json→json, que reformata o texto; com `raw` fica como está.
+pub fn chain(kind: Kind, source: Option<Kind>, width: u16, raw: bool) -> Vec<Backend> {
     let chain = chain_for(kind, width);
     let conversion = source
         .and_then(Format::from_kind)
         .zip(Format::from_kind(kind))
         .filter(|(from, to)| from != to);
+    let conversion = match conversion {
+        None if kind == Kind::Json && !raw => Some((Format::Json, Format::Json)),
+        other => other,
+    };
     let Some((from, to)) = conversion else {
         return chain;
     };
@@ -105,18 +110,27 @@ mod tests {
 
     #[test]
     fn mvp_chains() {
-        assert_eq!(programs(&chain(Kind::Code, None, 80)), ["bat", "cat"]);
         assert_eq!(
-            programs(&chain(Kind::Markdown, None, 80)),
+            programs(&chain(Kind::Code, None, 80, false)),
+            ["bat", "cat"]
+        );
+        assert_eq!(
+            programs(&chain(Kind::Markdown, None, 80, false)),
             ["glow", "bat", "cat"]
         );
-        assert_eq!(programs(&chain(Kind::Directory, None, 80)), ["eza", "ls"]);
-        assert_eq!(programs(&chain(Kind::Binary, None, 80)), ["hexyl", "xxd"]);
+        assert_eq!(
+            programs(&chain(Kind::Directory, None, 80, false)),
+            ["eza", "ls"]
+        );
+        assert_eq!(
+            programs(&chain(Kind::Binary, None, 80, false)),
+            ["hexyl", "xxd"]
+        );
     }
 
     #[test]
     fn structured_conversion_pipes_into_the_target_chain() {
-        let chain = chain(Kind::Yaml, Some(Kind::Json), 80);
+        let chain = chain(Kind::Yaml, Some(Kind::Json), 80, false);
         assert_eq!(chain.len(), 2);
         let convert = Internal::Convert {
             from: Format::Json,
@@ -137,18 +151,22 @@ mod tests {
     #[test]
     fn same_or_non_structured_source_does_not_convert() {
         let plain = chain_for(Kind::Yaml, 80);
-        assert_eq!(chain(Kind::Yaml, Some(Kind::Yaml), 80), plain);
-        assert_eq!(chain(Kind::Yaml, None, 80), plain);
-        assert_eq!(chain(Kind::Yaml, Some(Kind::Text), 80), plain);
+        assert_eq!(chain(Kind::Yaml, Some(Kind::Yaml), 80, false), plain);
         assert_eq!(
-            chain(Kind::Code, Some(Kind::Json), 80),
+            chain(Kind::Json, Some(Kind::Json), 80, true),
+            chain_for(Kind::Json, 80)
+        );
+        assert_eq!(chain(Kind::Yaml, None, 80, false), plain);
+        assert_eq!(chain(Kind::Yaml, Some(Kind::Text), 80, false), plain);
+        assert_eq!(
+            chain(Kind::Code, Some(Kind::Json), 80, false),
             chain_for(Kind::Code, 80)
         );
     }
 
     #[test]
     fn html_pipes_internal_markdown_into_the_markdown_chain() {
-        let chain = chain(Kind::Html, None, 80);
+        let chain = chain(Kind::Html, None, 80, false);
         let markdown = chain_for(Kind::Markdown, 80);
         assert_eq!(chain.len(), markdown.len());
         for (backend, sink) in chain.iter().zip(&markdown) {
@@ -166,9 +184,31 @@ mod tests {
 
     #[test]
     fn glow_gets_terminal_width() {
-        let Backend::External { args, .. } = &chain(Kind::Markdown, None, 97)[0] else {
+        let Backend::External { args, .. } = &chain(Kind::Markdown, None, 97, false)[0] else {
             panic!("esperava backend externo");
         };
         assert_eq!(args.last().unwrap(), "97");
+    }
+
+    #[test]
+    fn json_is_reformatted_unless_raw() {
+        let convert = Internal::Convert {
+            from: Format::Json,
+            to: Format::Json,
+        };
+        for source in [Some(Kind::Json), None] {
+            let chain = chain(Kind::Json, source, 80, false);
+            assert_eq!(chain.len(), 2);
+            for backend in &chain {
+                let Backend::Pipe { internal, .. } = backend else {
+                    panic!("esperava Pipe");
+                };
+                assert_eq!(*internal, convert);
+            }
+        }
+        assert_eq!(
+            chain(Kind::Json, Some(Kind::Json), 80, true),
+            chain_for(Kind::Json, 80)
+        );
     }
 }

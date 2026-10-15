@@ -30,6 +30,7 @@ final, e o cabeçalho mostra o caminho dele.
 | :-- | :-- |
 | `-v`, `--verbose` | mostra o cabeçalho (comando equivalente, notas e régua); sem ele, só o conteúdo |
 | `-n`, `--dry-run` | só imprime o comando que rodaria |
+| `--raw` | json como está, sem reformatar (erro com `--as` de outro formato) |
 | `--as <FORMAT>` | força o formato (`code`, `md`, `json`, `yaml`, `dir`, `binary`...); entre `json`, `yaml` e `toml` converte |
 | `--no-pager` | escreve direto no stdout |
 
@@ -46,7 +47,8 @@ Backends internos (Rust) ainda não implementados são pulados.
 | markdown | `glow -s dark -w <largura>` → `bat -l md` → `cat` |
 | diretório | `eza -la --tree -L2 --color=always` → `ls -la --color=always` |
 | binário | `hexyl` → `xxd` |
-| json, yaml, toml | `bat -l <tipo>` → `cat` |
+| json | conversão interna json→json (2 espaços, ordem das chaves mantida) → `bat -l json` → `cat`; inválido, `.jsonl`/`.ndjson` e `--raw` vão direto ao `bat` |
+| yaml, toml | `bat -l <tipo>` → `cat` |
 | json, yaml, toml com `--as` outro formato | conversão interna (`serde`) → `bat -l <formato>` → `cat` |
 | html | conversão interna (`htmd`, sem script, estilo e comentário) → cadeia de markdown (`glow` → `bat -l md` → `cat`) |
 | csv, tsv | tabela interna (`csv` + `comfy-table`) → `bat -l csv` → `cat` |

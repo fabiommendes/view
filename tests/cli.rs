@@ -441,9 +441,9 @@ mod structured {
     }
 
     #[test]
-    fn same_format_or_no_as_does_not_convert() {
+    fn raw_json_does_not_convert() {
         let raw = example("data.json");
-        for args in [vec!["--as", "json"], vec![]] {
+        for args in [vec!["--raw", "--as", "json"], vec!["--raw"]] {
             let out = view()
                 .args(["--no-pager"])
                 .args(&args)
@@ -470,6 +470,95 @@ mod structured {
             "{text}"
         );
         assert!(text.trim_end().ends_with("-l yaml"), "{text}");
+    }
+}
+
+mod json {
+    use super::{stdout_of, view};
+    use std::io::Write;
+    use std::process::{Output, Stdio};
+
+    const MINIFIED: &[u8] = br#"{"z":1,"a":{"y":[1,2],"b":null},"m":"x"}"#;
+
+    fn run(args: &[&str], input: &[u8]) -> Output {
+        let mut child = view()
+            .args(["--no-pager"])
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child.stdin.take().unwrap().write_all(input).unwrap();
+        child.wait_with_output().unwrap()
+    }
+
+    /// Texto sem as sequências de cor do `bat`.
+    fn plain(out: &Output) -> String {
+        let mut text = String::new();
+        let mut chars = stdout_of(out).chars().collect::<Vec<_>>().into_iter();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                text.push(c);
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn minified_json_is_formatted_with_key_order_kept() {
+        let out = run(&[], MINIFIED);
+        assert!(out.status.success(), "{out:?}");
+        let expected = "{\n  \"z\": 1,\n  \"a\": {\n    \"y\": [\n      1,\n      2\n    ],\n    \"b\": null\n  },\n  \"m\": \"x\"\n}\n";
+        assert_eq!(plain(&out), expected);
+    }
+
+    #[test]
+    fn raw_keeps_the_original_text() {
+        let out = run(&["--raw", "--as", "json"], MINIFIED);
+        assert!(out.status.success(), "{out:?}");
+        assert_eq!(plain(&out).trim_end().as_bytes(), MINIFIED);
+    }
+
+    #[test]
+    fn invalid_json_is_shown_as_is_without_error() {
+        let out = run(&["--as", "json"], b"{\"a\": ");
+        assert!(out.status.success(), "{out:?}");
+        assert_eq!(plain(&out).trim_end(), "{\"a\":");
+        assert!(out.stderr.is_empty());
+    }
+
+    #[test]
+    fn invalid_json_note_appears_with_verbose() {
+        let out = run(&["-v", "--as", "json"], b"{\"a\": ");
+        assert!(out.status.success(), "{out:?}");
+        assert!(stdout_of(&out).contains("# json inválido: mostrado como está"));
+        assert!(!stdout_of(&out).contains("interno"));
+    }
+
+    #[test]
+    fn raw_with_another_format_is_a_usage_error() {
+        let out = run(&["--raw", "--as", "yaml"], MINIFIED);
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--raw"));
+    }
+
+    #[test]
+    fn json_lines_stay_as_they_are() {
+        let dir = std::env::temp_dir().join(format!("view-jsonl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.jsonl");
+        std::fs::write(&file, "{\"a\":1}\n").unwrap();
+        let out = view().args(["--no-pager"]).arg(&file).output().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(out.status.success(), "{out:?}");
+        assert_eq!(plain(&out).trim_end(), "{\"a\":1}");
     }
 }
 
