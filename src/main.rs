@@ -12,7 +12,7 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 use crate::backend::Backend;
 use crate::detect::{Input, Kind};
@@ -44,7 +44,16 @@ struct Cli {
 }
 
 fn main() -> ExitCode {
-    match run(&Cli::parse()) {
+    let cli = Cli::parse();
+    // O `-n` com `--as` não lê o stdin, então não há o que mostrar sem alvo.
+    let reads_stdin = !(cli.dry_run && cli.format.is_some());
+    if reads_stdin && missing_target(cli.target.as_deref(), std::io::stdin().is_terminal()) {
+        eprintln!("view: nada para mostrar (stdin é um terminal)");
+        eprint!("{}", Cli::command().render_usage());
+        eprintln!();
+        return ExitCode::from(2);
+    }
+    match run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("view: {e:#}");
@@ -94,6 +103,12 @@ fn run(cli: &Cli) -> Result<()> {
         temp_path: &stdin_path,
     };
     run_backend(resolution.backend, &input, &stdin, &header, pager.as_ref())
+}
+
+/// Sem alvo (ou `-`) e com o stdin num terminal, ler o stdin bloqueia esperando
+/// o usuário digitar, então o caso é recusado antes da leitura.
+fn missing_target(target: Option<&str>, stdin_is_terminal: bool) -> bool {
+    Input::from_arg(target) == Input::Stdin && stdin_is_terminal
 }
 
 /// Conteúdo lido do stdin e onde gravá-lo para backends que exigem caminho.
@@ -157,4 +172,18 @@ fn run_backend(
 fn is_broken_pipe(status: &std::process::ExitStatus) -> bool {
     use std::os::unix::process::ExitStatusExt;
     status.signal() == Some(13)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_target_only_when_stdin_is_terminal() {
+        assert!(missing_target(None, true));
+        assert!(missing_target(Some("-"), true));
+        assert!(!missing_target(None, false));
+        assert!(!missing_target(Some("-"), false));
+        assert!(!missing_target(Some("foto.png"), true));
+    }
 }
