@@ -1,7 +1,14 @@
 use std::process::Command;
 
+/// Fixa o idioma em pt-BR: os testes conferem as mensagens em português e não
+/// podem depender do `LANG` de quem roda.
 fn view() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_view"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_view"));
+    command
+        .env_remove("LC_MESSAGES")
+        .env_remove("LANG")
+        .env("LC_ALL", "pt_BR.UTF-8");
+    command
 }
 
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixture.txt");
@@ -313,7 +320,7 @@ fn stdin_toml_gets_highlighted() {
 mod structured {
     use super::{EXAMPLES, stdout_of, view};
     use std::io::Write;
-    use std::process::{Command, Output, Stdio};
+    use std::process::{Output, Stdio};
 
     fn run(format: &str, example: &str) -> Output {
         view()
@@ -332,7 +339,7 @@ mod structured {
     }
 
     fn run_stdin_args(args: &[&str], content: &[u8]) -> Output {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_view"))
+        let mut child = view()
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

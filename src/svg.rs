@@ -15,7 +15,8 @@ pub fn is_valid(bytes: &[u8]) -> bool {
 pub fn rasterize(bytes: &[u8], max_w: f64, max_h: Option<f64>) -> Result<DynamicImage> {
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
-    let tree = usvg::Tree::from_data(bytes, &options).context("SVG inválido")?;
+    let tree = usvg::Tree::from_data(bytes, &options)
+        .with_context(|| crate::i18n::t("error-svg-invalid"))?;
     let size = tree.size();
     let (w, h) = (f64::from(size.width()), f64::from(size.height()));
     let mut scale = max_w / w;
@@ -24,7 +25,8 @@ pub fn rasterize(bytes: &[u8], max_w: f64, max_h: Option<f64>) -> Result<Dynamic
     }
     let width = (w * scale).round().max(1.0) as u32;
     let height = (h * scale).round().max(1.0) as u32;
-    let mut pixmap = tiny_skia::Pixmap::new(width, height).context("SVG grande demais")?;
+    let mut pixmap = tiny_skia::Pixmap::new(width, height)
+        .with_context(|| crate::i18n::t("error-svg-too-large"))?;
     pixmap.fill(tiny_skia::Color::WHITE);
     let transform = tiny_skia::Transform::from_scale(scale as f32, scale as f32);
     resvg::render(&tree, transform, &mut pixmap.as_mut());

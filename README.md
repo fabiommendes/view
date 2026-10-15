@@ -137,6 +137,23 @@ $ view --as yaml foo.json  # json→yaml interno | bat --color=always --paging=n
 Conversão impossível (ex. `null` para toml) termina com erro, sem saída.
 `--as` igual ao formato de origem não converte.
 
+## Languages
+
+Messages and `--help` are available in English, Brazilian Portuguese (pt-BR)
+and Spanish (es).
+
+- The language comes from `LC_ALL`, `LC_MESSAGES` and `LANG`, in this order:
+  the first one that is set and not empty decides. `pt*` selects pt-BR, `es*`
+  selects Spanish, `en*` and anything else (`C`, `POSIX`, `de_DE`...) selects
+  English. There is no `--lang`; to force a language use `LC_ALL=es_ES.UTF-8 view ...`.
+- To add a language, create `locales/<tag>/view.ftl` with the same messages as
+  `locales/en/view.ftl` (Fluent syntax), and add one line to `LANGUAGES` in
+  `src/i18n.rs`. A test checks that all files have the same message ids.
+- Known limitation: the labels clap generates ("Usage:", "Options:", "Print
+  help") and its argument parsing errors stay in English. The `# ...` notes
+  are translated, but the `$ ...` command of the `-v` header and the output of
+  external tools (`bat`, `pdftotext`...) are not.
+
 ## Licença
 
 MIT ou Apache-2.0, à escolha.

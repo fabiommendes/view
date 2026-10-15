@@ -6,6 +6,7 @@ mod detect;
 mod fetch;
 mod header;
 mod html;
+mod i18n;
 mod image;
 mod pager;
 mod route;
@@ -18,48 +19,55 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser};
 
 use crate::backend::{Backend, Internal};
 use crate::convert::Format;
 use crate::detect::{Input, Kind};
 
 #[derive(Parser, Debug)]
-#[command(
-    version,
-    about = "Mostra um arquivo, URL ou stdin com o visualizador certo"
-)]
+// The help texts come from the locale files, see `localized_command`.
+#[command(version)]
 struct Cli {
-    /// Arquivo, diretório ou URL. Ausente ou `-` lê o stdin.
     target: Option<String>,
 
-    /// Imprime o cabeçalho (comando equivalente, notas e régua).
     #[arg(short, long)]
     verbose: bool,
 
-    /// Só imprime o comando que rodaria.
     #[arg(short = 'n', long)]
     dry_run: bool,
 
-    /// Força o formato (md, json, yaml, code, dir, binary...).
     #[arg(long = "as", value_name = "FORMAT")]
     format: Option<String>,
 
-    /// Mostra o json como está, sem reformatar.
     #[arg(long)]
     raw: bool,
 
-    /// Escreve direto no stdout, sem pager.
     #[arg(long)]
     no_pager: bool,
 }
 
+/// The clap command with the about and argument help in the user's language.
+fn localized_command() -> clap::Command {
+    Cli::command()
+        .about(i18n::t("help-about"))
+        .mut_arg("target", |a| a.help(i18n::t("help-target")))
+        .mut_arg("verbose", |a| a.help(i18n::t("help-verbose")))
+        .mut_arg("dry_run", |a| a.help(i18n::t("help-dry-run")))
+        .mut_arg("format", |a| a.help(i18n::t("help-as")))
+        .mut_arg("raw", |a| a.help(i18n::t("help-raw")))
+        .mut_arg("no_pager", |a| a.help(i18n::t("help-no-pager")))
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match Cli::from_arg_matches(&localized_command().get_matches()) {
+        Ok(cli) => cli,
+        Err(e) => e.exit(),
+    };
     // O `-n` com `--as` não lê o stdin, então não há o que mostrar sem alvo.
     let reads_stdin = !(cli.dry_run && cli.format.is_some());
     if reads_stdin && missing_target(cli.target.as_deref(), std::io::stdin().is_terminal()) {
-        eprintln!("view: nada para mostrar (stdin é um terminal)");
+        eprintln!("view: {}", i18n::t("error-no-input"));
         eprint!("{}", Cli::command().render_usage());
         eprintln!();
         return ExitCode::from(2);
@@ -117,7 +125,10 @@ fn run(cli: &Cli) -> Result<()> {
         None => source.unwrap_or(Kind::Text),
     };
     if cli.raw && cli.format.is_some() && kind != Kind::Json {
-        bail!("--raw só vale para json, mas --as pede {}", kind.name());
+        bail!(
+            "{}",
+            i18n::t_args("error-raw-needs-json", &[("kind", kind.name())])
+        );
     }
     let source = if Format::from_kind(kind).is_some()
         && source.is_some_and(is_plain_text)
@@ -184,13 +195,16 @@ fn run(cli: &Cli) -> Result<()> {
             .into_iter()
             .collect();
         if matches!(backend, Backend::Internal(Internal::Image | Internal::Svg)) {
-            notes.push(format!("# imagem: {}", image_protocol.name()));
+            notes.push(i18n::t_args(
+                "note-image",
+                &[("protocol", image_protocol.name())],
+            ));
         }
         if invalid_json {
-            notes.push("# json inválido: mostrado como está".to_owned());
+            notes.push(i18n::t("note-invalid-json"));
         }
         if invalid_svg {
-            notes.push("# svg inválido: mostrado como texto".to_owned());
+            notes.push(i18n::t("note-invalid-svg"));
         }
         header::render(&command, &notes, usize::from(width))
     } else {
@@ -215,14 +229,16 @@ fn missing_viewer(kind: Kind, chain: &[Backend]) -> anyhow::Error {
             program,
             install_hint: Some(hint),
             ..
-        } => Some(format!(" (instale {program}: {hint})")),
+        } => Some(i18n::t_args(
+            "viewer-install-hint",
+            &[("program", program), ("hint", hint)],
+        )),
         _ => None,
     });
-    anyhow!(
-        "nenhum visualizador disponível para {}{}",
-        kind.name(),
-        hint.unwrap_or_default()
-    )
+    anyhow!(i18n::t_args(
+        "error-no-viewer",
+        &[("kind", kind.name()), ("hint", &hint.unwrap_or_default()),],
+    ))
 }
 
 /// Tipos que a detecção usa quando não reconhece o formato da entrada.
@@ -348,7 +364,7 @@ fn run_backend(
     }
     let mut child = command
         .spawn()
-        .with_context(|| format!("não foi possível executar `{program}`"))?;
+        .with_context(|| i18n::t_args("error-run-program", &[("program", program)]))?;
     // Sem esta ponta aberta aqui, o pipe fecha quando o backend termina.
     drop(command);
     drop(writer);
@@ -365,7 +381,13 @@ fn run_backend(
         drop(body);
         let status = child.wait()?;
         if !status.success() && !is_broken_pipe(&status) {
-            bail!("`{program}` terminou com {status}");
+            bail!(
+                "{}",
+                i18n::t_args(
+                    "error-program-status",
+                    &[("program", program), ("status", &status.to_string())]
+                )
+            );
         }
         Ok(())
     })

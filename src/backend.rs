@@ -63,13 +63,15 @@ impl Internal {
         match self {
             Self::Convert { from, to } => {
                 let bytes = source_bytes(input, content)?;
-                let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
+                let text =
+                    String::from_utf8(bytes).with_context(|| crate::i18n::t("error-not-utf8"))?;
                 out.write_all(convert::convert(&text, from, to)?.as_bytes())?;
                 Ok(())
             }
             Self::Html => {
                 let bytes = source_bytes(input, content)?;
-                let text = String::from_utf8(bytes).context("entrada não é UTF-8")?;
+                let text =
+                    String::from_utf8(bytes).with_context(|| crate::i18n::t("error-not-utf8"))?;
                 out.write_all(html::to_markdown(&text)?.as_bytes())?;
                 Ok(())
             }
@@ -83,7 +85,7 @@ impl Internal {
                 out.write_all(table::render(&bytes, delimiter, width)?.as_bytes())?;
                 Ok(())
             }
-            Self::Image | Self::Svg => bail!("imagem escreve direto no terminal, sem pager"),
+            Self::Image | Self::Svg => bail!("{}", crate::i18n::t("error-image-no-pager")),
         }
     }
 
@@ -116,7 +118,10 @@ impl Internal {
                 let img = svg::rasterize(&bytes, max_w, max_h)?;
                 image::render_image(&img, protocol, size, reserved_rows, out)
             }
-            _ => bail!("{self:?} não escreve direto no terminal"),
+            _ => bail!(
+                "{}",
+                crate::i18n::t_args("error-not-direct", &[("kind", &format!("{self:?}"))])
+            ),
         }
     }
 }
@@ -125,9 +130,8 @@ impl Internal {
 fn source_bytes(input: &Input, content: &[u8]) -> anyhow::Result<Vec<u8>> {
     match input {
         Input::Stdin => Ok(content.to_vec()),
-        Input::Target(path) => {
-            std::fs::read(path).with_context(|| format!("não foi possível ler {path}"))
-        }
+        Input::Target(path) => std::fs::read(path)
+            .with_context(|| crate::i18n::t_args("error-read-file", &[("path", path)])),
     }
 }
 

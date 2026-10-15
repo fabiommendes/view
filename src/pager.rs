@@ -27,13 +27,19 @@ pub struct External {
 
 impl Pager for External {
     fn page(&self, header: &str, body: &mut dyn Read) -> Result<()> {
-        let (program, args) = self.argv.split_first().context("pager vazio")?;
+        let (program, args) = self
+            .argv
+            .split_first()
+            .with_context(|| crate::i18n::t("error-pager-empty"))?;
         let mut child = Command::new(program)
             .args(args)
             .stdin(Stdio::piped())
             .spawn()
-            .with_context(|| format!("não foi possível executar o pager `{program}`"))?;
-        let mut stdin = child.stdin.take().context("pager sem stdin")?;
+            .with_context(|| crate::i18n::t_args("error-pager-run", &[("program", program)]))?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .with_context(|| crate::i18n::t("error-pager-no-stdin"))?;
         let result = copy_all(header, body, &mut stdin);
         drop(stdin);
         child.wait()?;

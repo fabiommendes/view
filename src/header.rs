@@ -96,7 +96,10 @@ pub fn install_hint(resolution: &Resolution<'_>) -> Option<String> {
             program,
             install_hint: Some(hint),
             ..
-        } => Some(format!("# {program} não encontrado: {hint}")),
+        } => Some(crate::i18n::t_args(
+            "note-install-hint",
+            &[("program", program), ("hint", hint)],
+        )),
         _ => None,
     })
 }
@@ -138,7 +141,10 @@ mod tests {
     fn render_places_hint_between_command_and_ruler() {
         let out = render(
             "$ bat a",
-            &["# glow não encontrado: pacman -S glow".to_owned()],
+            &[crate::i18n::t_args(
+                "note-install-hint",
+                &[("program", "glow"), ("hint", "pacman -S glow")],
+            )],
             3,
         );
         let lines: Vec<&str> = out.lines().collect();
@@ -233,7 +239,10 @@ mod tests {
         };
         assert_eq!(
             install_hint(&res).unwrap(),
-            "# glow não encontrado: pacman -S glow"
+            crate::i18n::t_args(
+                "note-install-hint",
+                &[("program", "glow"), ("hint", "pacman -S glow")]
+            )
         );
         let res = Resolution {
             backend: &chain[0],

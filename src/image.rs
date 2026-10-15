@@ -177,8 +177,8 @@ pub fn render(
     reserved_rows: u32,
     out: &mut dyn Write,
 ) -> Result<()> {
-    let img = image::load_from_memory(bytes)
-        .context("não foi possível decodificar a imagem (suportados: png, jpeg, gif, webp)")?;
+    let img =
+        image::load_from_memory(bytes).with_context(|| crate::i18n::t("error-image-decode"))?;
     render_image(&img, protocol, size, reserved_rows, out)
 }
 

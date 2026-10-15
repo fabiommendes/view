@@ -50,18 +50,28 @@ pub fn render(content: &[u8], delimiter: u8, width: u16) -> anyhow::Result<Strin
     let Some(header) = records.next() else {
         return Ok(String::new());
     };
-    table.set_header(cells(&header.context("csv inválido")?));
+    table.set_header(cells(
+        &header.with_context(|| crate::i18n::t("error-csv-invalid"))?,
+    ));
     let mut shown = 0;
     for record in records.by_ref().take(MAX_ROWS) {
-        table.add_row(cells(&record.context("csv inválido")?));
+        table.add_row(cells(
+            &record.with_context(|| crate::i18n::t("error-csv-invalid"))?,
+        ));
         shown += 1;
     }
     let omitted = records.count();
     let mut out = format!("{table}\n");
     if omitted > 0 {
-        out.push_str(&format!(
-            "… {shown} linhas mostradas, {omitted} omitidas (limite de {MAX_ROWS})\n"
+        out.push_str(&crate::i18n::t_args(
+            "table-truncated",
+            &[
+                ("shown", &shown.to_string()),
+                ("omitted", &omitted.to_string()),
+                ("max", &MAX_ROWS.to_string()),
+            ],
         ));
+        out.push('\n');
     }
     Ok(out)
 }

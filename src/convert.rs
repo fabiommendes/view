@@ -55,13 +55,12 @@ pub fn sniff(text: &str) -> Option<Format> {
 
 /// Lê `text` como `from` e o reescreve como `to`, preservando a ordem das chaves.
 pub fn convert(text: &str, from: Format, to: Format) -> Result<String> {
-    let value =
-        parse(text, from).with_context(|| format!("entrada não é {} válido", from.name()))?;
+    let value = parse(text, from)
+        .with_context(|| crate::i18n::t_args("error-input-invalid", &[("format", from.name())]))?;
     serialize(&value, to).with_context(|| {
-        format!(
-            "não foi possível converter {} para {}",
-            from.name(),
-            to.name()
+        crate::i18n::t_args(
+            "error-convert-failed",
+            &[("from", from.name()), ("to", to.name())],
         )
     })
 }
@@ -170,7 +169,7 @@ mod tests {
     fn null_to_toml_is_a_clear_error() {
         let err = convert(DATA, Format::Json, Format::Toml).unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("json para toml"), "{msg}");
+        assert!(msg.contains("json") && msg.contains("toml"), "{msg}");
     }
 
     #[test]

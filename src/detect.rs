@@ -83,7 +83,10 @@ impl Kind {
             "binary" | "bin" => Self::Binary,
             "media" => Self::Media,
             "text" | "txt" => Self::Text,
-            other => bail!("formato desconhecido: {other}"),
+            other => bail!(
+                "{}",
+                crate::i18n::t_args("error-unknown-format", &[("name", other)])
+            ),
         })
     }
 }

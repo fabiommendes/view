@@ -83,7 +83,11 @@ fn base() -> &'static str {
 }
 
 fn view(args: &[&str]) -> Output {
+    // Idioma fixo em pt-BR: os testes conferem mensagens em português.
     Command::new(env!("CARGO_BIN_EXE_view"))
+        .env_remove("LC_MESSAGES")
+        .env_remove("LANG")
+        .env("LC_ALL", "pt_BR.UTF-8")
         .args(args)
         .stdin(std::process::Stdio::null())
         .output()

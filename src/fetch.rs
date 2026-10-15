@@ -46,10 +46,11 @@ pub fn download(url: &str) -> Result<Download> {
 fn describe(url: &str, error: &ureq::Error) -> anyhow::Error {
     let reason = match error {
         ureq::Error::StatusCode(code) => format!("HTTP {code}"),
-        ureq::Error::Timeout(_) => "tempo esgotado".to_owned(),
-        ureq::Error::BodyExceedsLimit(_) => {
-            format!("resposta maior que {} MiB", MAX_BYTES / (1024 * 1024))
-        }
+        ureq::Error::Timeout(_) => crate::i18n::t("error-fetch-timeout"),
+        ureq::Error::BodyExceedsLimit(_) => crate::i18n::t_args(
+            "error-fetch-too-large",
+            &[("mib", &(MAX_BYTES / (1024 * 1024)).to_string())],
+        ),
         other => other.to_string(),
     };
     anyhow!("{url}: {reason}")

@@ -11,7 +11,7 @@ pub fn to_markdown(html: &str) -> Result<String> {
         .build();
     let mut markdown = converter
         .convert(html)
-        .context("não foi possível converter o HTML")?;
+        .with_context(|| crate::i18n::t("error-html-convert"))?;
     markdown.push('\n');
     Ok(markdown)
 }

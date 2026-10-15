@@ -31,6 +31,8 @@ Nível 2 (aplicativo público), conforme `~/git/tools/tooling-root/dev/adr/0002-
 - `src/pager.rs`: trait `Pager`, pager externo e escrita direta.
 - `src/image.rs`: imagens direto no terminal (kitty `a=T` ou meio-bloco), tamanho via `TIOCGWINSZ`.
 - `src/svg.rs`: SVG rasterizado com `resvg`, entregue ao `image`.
+- `src/i18n.rs`: mensagens traduzidas (Fluent), idioma por `LC_ALL`/`LC_MESSAGES`/`LANG`. Nos testes unitários o idioma é sempre pt-BR.
+- `locales/<idioma>/view.ftl`: mensagens em en, pt-BR e es, embutidas no binário.
 - `dev/`: `issues/`, `adr/` e `notes/`, conforme o ADR 0003 do tooling-root.
 
 ## Regras
@@ -39,6 +41,7 @@ Nível 2 (aplicativo público), conforme `~/git/tools/tooling-root/dev/adr/0002-
 - Json passa por `Convert { Json, Json }` (reformata) salvo `--raw`; json inválido cai no `bat` cru (`main::is_valid_json`).
 - Imagem e SVG não passam pelo pager: `Internal::writes_to_terminal` marca renderizadores que escrevem direto no stdout, depois do cabeçalho. Veja `dev/notes/kitty-placeholders.md`.
 - Toda cadeia nova em `route.rs` vem com teste e entra na tabela do `README.md`.
+- Toda mensagem nova vai nos três `.ftl` (`locales/en`, `locales/pt-BR`, `locales/es`), com o mesmo id; nada de texto para o usuário direto no código.
 - Sem crates novos sem necessidade clara.
 - Trabalhe direto na `main`, sem branch nem worktree (decisão do humano, desvio do ADR 0003). Uma issue ainda passa por `in_progress` e `in_review`, e cada item do `## Plano` é marcado no commit que o fecha.
 

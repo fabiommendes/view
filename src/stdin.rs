@@ -13,7 +13,7 @@ pub fn read_all() -> Result<Vec<u8>> {
     std::io::stdin()
         .lock()
         .read_to_end(&mut bytes)
-        .context("não foi possível ler o stdin")?;
+        .with_context(|| crate::i18n::t("error-stdin-read"))?;
     Ok(bytes)
 }
 
@@ -39,13 +39,19 @@ impl TempFile {
             .create_new(true)
             .mode(0o600)
             .open(path)
-            .with_context(|| format!("não foi possível criar {}", path.display()))?;
+            .with_context(|| {
+                crate::i18n::t_args(
+                    "error-create-file",
+                    &[("path", &path.display().to_string())],
+                )
+            })?;
         // O guard já vale: se a escrita falhar, o arquivo é apagado.
         let guard = Self {
             path: path.to_owned(),
         };
-        file.write_all(bytes)
-            .with_context(|| format!("não foi possível escrever {}", path.display()))?;
+        file.write_all(bytes).with_context(|| {
+            crate::i18n::t_args("error-write-file", &[("path", &path.display().to_string())])
+        })?;
         Ok(guard)
     }
 }
