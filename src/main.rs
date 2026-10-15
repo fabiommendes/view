@@ -66,6 +66,8 @@ fn main() -> ExitCode {
     }
     match run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
+        // Quem lê a saída fechou o pipe antes do fim (ex. `| head`).
+        Err(e) if is_broken_pipe_error(&e) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("view: {e:#}");
             ExitCode::FAILURE
@@ -366,6 +368,14 @@ fn run_backend(
             bail!("`{program}` terminou com {status}");
         }
         Ok(())
+    })
+}
+
+fn is_broken_pipe_error(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|e| e.kind() == std::io::ErrorKind::BrokenPipe)
     })
 }
 

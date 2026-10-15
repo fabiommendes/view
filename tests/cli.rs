@@ -859,3 +859,18 @@ mod svg {
         assert!(!text.contains('▀'));
     }
 }
+
+#[test]
+fn image_into_a_closed_pipe_is_not_an_error() {
+    use std::process::Stdio;
+    let mut child = view()
+        .arg(format!("{EXAMPLES}/photo.jpg"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success(), "{out:?}");
+    assert!(out.stderr.is_empty(), "{out:?}");
+}
