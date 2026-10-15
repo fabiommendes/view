@@ -35,6 +35,7 @@ Nível 1 (repositório privado), conforme `~/git/tools/tooling-root/dev/adr/0002
 - Renderizadores internos (`backend::Internal`) ficam fora da resolução enquanto `is_implemented` for `false`. Ao implementar um, troque o `todo!()` e o `is_implemented`.
 - Toda cadeia nova em `route.rs` vem com teste e entra na tabela do `README.md`.
 - Sem crates novos sem necessidade clara.
+- Trabalhe direto na `main`, sem branch nem worktree (decisão do humano, desvio do ADR 0003). Uma issue ainda passa por `in_progress` e `in_review`, e cada item do `## Plano` é marcado no commit que o fecha.
 
 ## Ordens permanentes
 
