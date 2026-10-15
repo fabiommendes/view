@@ -1,6 +1,6 @@
 ---
 type: issue
-status: in_progress
+status: in_review
 tags: [image, kitty]
 relatedTo: [dev/rfc/mvp.md, dev/notes/kitty-placeholders.md]
 kind: enhancement
@@ -40,3 +40,13 @@ kitty não aparecem dentro do `less` no Ghostty (só lixo), mesmo com
   `m=1` em todos menos o último).
 - Confirmação visual do humano no Ghostty com `tests/examples/image.png` e
   `photo.jpg`.
+
+## Plano
+
+- [x] Módulo `image`: decodificação, tamanho (`TIOCGWINSZ`) e ajuste ao terminal (R4)
+- [x] Meio-bloco `▀` truecolor (R2)
+- [x] Sequência kitty `a=T` em blocos de 4096 bytes (R1)
+- [x] `Internal::Image` escreve direto no terminal, sem pager, e cabeçalho `# imagem: ...` (R3, R5)
+- [x] Testes com `image.png`, `photo.jpg` e `image-as.txt`
+- [x] Remover o spike, reduzir a nota (R6), `README.md` e `AGENTS.md`
+- [x] Issue em `in_review`
