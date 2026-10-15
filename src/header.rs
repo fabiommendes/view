@@ -53,7 +53,8 @@ fn command_body(
             let argv = backend
                 .argv(input, stdin_path)
                 .expect("backend externo sempre tem argv");
-            shell_words(&argv)
+            let redirect = if backend.merges_stderr() { " 2>&1" } else { "" };
+            format!("{}{redirect}", shell_words(&argv))
         }
         Backend::Internal(internal) => internal_body(*internal, input, forced),
         Backend::Pipe { internal, sink } => {

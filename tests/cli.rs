@@ -742,3 +742,82 @@ mod csv {
         assert!(!stdout_of(&out).contains("omitidas"));
     }
 }
+
+/// Testes da segunda leva com programas externos (`pdftotext`, `bsdtar`,
+/// `ffprobe`). Sem o programa no PATH, o teste não tem o que verificar.
+mod external_viewers {
+    use super::*;
+
+    fn installed(program: &str) -> bool {
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .any(|dir| dir.join(program).is_file())
+    }
+
+    fn file_and_stdin(example: &str) -> [std::process::Output; 2] {
+        [
+            view_example(example, &["--no-pager"]),
+            view_stdin(&["--no-pager"], &example_bytes(example)),
+        ]
+    }
+
+    #[test]
+    fn pdf_is_text() {
+        if !installed("pdftotext") {
+            return;
+        }
+        for out in file_and_stdin("doc.pdf") {
+            assert!(out.status.success(), "{out:?}");
+            assert!(stdout_of(&out).contains("Documento de exemplo"));
+        }
+    }
+
+    #[test]
+    fn pdf_dry_run_writes_text_to_stdout() {
+        let text = stdout_of(&dry_run("doc.pdf"));
+        assert!(text.starts_with("$ pdftotext -layout "), "{text}");
+        assert!(text.trim_end().ends_with("doc.pdf -"), "{text}");
+    }
+
+    #[test]
+    fn archives_are_listed() {
+        if !installed("bsdtar") {
+            return;
+        }
+        for (example, member) in [
+            ("archive.zip", "notes.txt"),
+            ("archive.tar.gz", "data.json"),
+        ] {
+            for out in file_and_stdin(example) {
+                assert!(out.status.success(), "{example}: {out:?}");
+                assert!(stdout_of(&out).contains(member), "{example}");
+            }
+        }
+    }
+
+    #[test]
+    fn media_shows_ffprobe_summary_from_stderr() {
+        if !installed("ffprobe") {
+            return;
+        }
+        for out in file_and_stdin("sound.wav") {
+            assert!(out.status.success(), "{out:?}");
+            let text = stdout_of(&out);
+            assert!(text.contains("Duration: 00:00:01.00"), "{text}");
+            assert!(text.contains("Audio: pcm_s16le"), "{text}");
+        }
+        let text = stdout_of(&dry_run("sound.wav"));
+        assert!(text.trim_end().ends_with("sound.wav 2>&1"), "{text}");
+    }
+
+    #[test]
+    fn missing_viewer_error_suggests_install() {
+        let out = view()
+            .args(["--no-pager", &format!("{EXAMPLES}/doc.pdf")])
+            .env("PATH", "/nonexistent")
+            .output()
+            .unwrap();
+        assert!(!out.status.success());
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("pacman -S poppler"), "{err}");
+    }
+}

@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_review
 tags: [archive]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -22,5 +22,5 @@ creator: claude
 
 ## Plano
 
-- [ ] Cadeia `bsdtar` → `tar`, só com caminho (R1, R2)
-- [ ] Testes, `README.md` e issue em `in_review`
+- [x] Cadeia `bsdtar` → `tar`, só com caminho (R1, R2)
+- [x] Testes, `README.md` e issue em `in_review`

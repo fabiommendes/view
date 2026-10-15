@@ -88,9 +88,19 @@ fn chain_for(kind: Kind, width: u16) -> Vec<Backend> {
         Kind::Svg => vec![Backend::Internal(Internal::Svg), bat(Some("xml")), cat()],
         Kind::Csv => vec![Backend::Internal(Internal::Csv), bat(Some("csv")), cat()],
         Kind::Image => vec![Backend::Internal(Internal::Image)],
-        Kind::Pdf => vec![Backend::Internal(Internal::Pdf)],
-        Kind::Archive => vec![Backend::Internal(Internal::Archive)],
-        Kind::Media => vec![Backend::Internal(Internal::Media)],
+        Kind::Pdf => vec![
+            Backend::external("pdftotext", &["-layout"], Some("pacman -S poppler"))
+                .trailing(&["-"]),
+        ],
+        Kind::Archive => vec![
+            Backend::external("bsdtar", &["-tvf"], Some("pacman -S libarchive")).path_only(),
+            Backend::external("tar", &["-tvf"], None).path_only(),
+        ],
+        Kind::Media => vec![
+            Backend::external("ffprobe", &["-hide_banner"], Some("pacman -S ffmpeg"))
+                .path_only()
+                .merge_stderr(),
+        ],
     }
 }
 
@@ -126,6 +136,16 @@ mod tests {
             programs(&chain(Kind::Binary, None, 80, false)),
             ["hexyl", "xxd"]
         );
+    }
+
+    #[test]
+    fn second_wave_chains() {
+        assert_eq!(programs(&chain_for(Kind::Pdf, 80)), ["pdftotext"]);
+        assert_eq!(programs(&chain_for(Kind::Archive, 80)), ["bsdtar", "tar"]);
+        assert!(chain_for(Kind::Archive, 80).iter().all(Backend::needs_path));
+        let media = chain_for(Kind::Media, 80);
+        assert_eq!(programs(&media), ["ffprobe"]);
+        assert!(media[0].needs_path() && media[0].merges_stderr());
     }
 
     #[test]

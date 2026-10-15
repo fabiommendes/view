@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_review
 tags: [pdf]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -23,7 +23,7 @@ creator: claude
 
 ## Plano
 
-- [ ] Argumentos finais em `Backend::External` (R2)
-- [ ] Cadeia de pdf com `pdftotext` (R1)
-- [ ] Dica de instalação no erro de cadeia vazia (R3)
-- [ ] Testes, `README.md` e issue em `in_review`
+- [x] Argumentos finais em `Backend::External` (R2)
+- [x] Cadeia de pdf com `pdftotext` (R1)
+- [x] Dica de instalação no erro de cadeia vazia (R3)
+- [x] Testes, `README.md` e issue em `in_review`

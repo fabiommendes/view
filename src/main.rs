@@ -128,8 +128,7 @@ fn run(cli: &Cli) -> Result<()> {
     let width = header::terminal_width();
     let chain = route::chain(kind, source, width, cli.raw);
     let path = std::env::var_os("PATH").unwrap_or_default();
-    let resolution = backend::resolve(&chain, &path)
-        .ok_or_else(|| anyhow!("nenhum visualizador disponível para {}", kind.name()))?;
+    let resolution = backend::resolve(&chain, &path).ok_or_else(|| missing_viewer(kind, &chain))?;
 
     // Json inválido não é erro: mostra o texto como está, sem a conversão.
     let mut backend = resolution.backend;
@@ -190,6 +189,24 @@ fn run(cli: &Cli) -> Result<()> {
         image_protocol,
     };
     run_backend(backend, &input, &content, &header, pager.as_ref())
+}
+
+/// Erro de cadeia sem backend disponível, com a dica de instalação do
+/// preferido, se houver.
+fn missing_viewer(kind: Kind, chain: &[Backend]) -> anyhow::Error {
+    let hint = chain.iter().find_map(|b| match b {
+        Backend::External {
+            program,
+            install_hint: Some(hint),
+            ..
+        } => Some(format!(" (instale {program}: {hint})")),
+        _ => None,
+    });
+    anyhow!(
+        "nenhum visualizador disponível para {}{}",
+        kind.name(),
+        hint.unwrap_or_default()
+    )
 }
 
 /// Tipos que a detecção usa quando não reconhece o formato da entrada.
@@ -298,17 +315,26 @@ fn run_backend(
         .transpose()?;
     let pipe_stdin = *input == Input::Stdin && !backend.needs_path();
     let (program, args) = argv.split_first().expect("argv nunca é vazio");
-    let mut child = Command::new(program)
+    // Um pipe próprio, para o stderr poder ir junto com o stdout.
+    let (mut body, writer) = std::io::pipe()?;
+    let mut command = Command::new(program);
+    command
         .args(args)
         .stdin(if pipe_stdin {
             Stdio::piped()
         } else {
             Stdio::null()
         })
-        .stdout(Stdio::piped())
+        .stdout(writer.try_clone()?);
+    if backend.merges_stderr() {
+        command.stderr(writer.try_clone()?);
+    }
+    let mut child = command
         .spawn()
         .with_context(|| format!("não foi possível executar `{program}`"))?;
-    let mut body = child.stdout.take().context("backend sem stdout")?;
+    // Sem esta ponta aberta aqui, o pipe fecha quando o backend termina.
+    drop(command);
+    drop(writer);
     // Escreve em outra thread: o backend pode encher o pipe de saída antes
     // de terminar de ler a entrada.
     std::thread::scope(|scope| {

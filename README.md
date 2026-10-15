@@ -55,7 +55,13 @@ Backends internos (Rust) ainda não implementados são pulados.
 | svg | interno (pendente) → `bat -l svg` → `cat` |
 | url | baixa e usa a cadeia do tipo da resposta (ver abaixo) |
 | imagem | interno, direto no terminal, sem pager (ver abaixo) |
-| pdf, arquivo compactado, mídia | interno (pendente) |
+| pdf | `pdftotext -layout <alvo> -` |
+| arquivo compactado | `bsdtar -tvf` → `tar -tvf` (só caminho) |
+| áudio, vídeo | `ffprobe -hide_banner` com o stderr no stdout (só caminho) |
+
+"Só caminho": o backend não lê stdin, então stdin e URL vão para um arquivo
+temporário. Sem nenhum backend da cadeia instalado, o erro sugere como instalar
+o preferido.
 
 A detecção usa diretório, prefixo `http(s)://`, magic bytes, extensão e, por
 último, o conteúdo.

@@ -26,9 +26,6 @@ pub enum Internal {
     Svg,
     Html,
     Csv,
-    Pdf,
-    Archive,
-    Media,
 }
 
 impl Internal {
@@ -56,9 +53,6 @@ impl Internal {
             Self::Svg => "svg rasterizado internamente",
             Self::Html => "html→md interno",
             Self::Csv => "csv→tabela interno",
-            Self::Pdf => "pdf→texto interno",
-            Self::Archive => "listagem interna do arquivo",
-            Self::Media => "metadados internos da mídia",
         };
         text.to_owned()
     }
@@ -140,14 +134,19 @@ fn source_bytes(input: &Input, content: &[u8]) -> anyhow::Result<Vec<u8>> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Backend {
-    /// Programa no PATH; o alvo é acrescentado ao fim dos argumentos.
+    /// Programa no PATH; o alvo vem depois de `args` e antes de `trailing`.
     External {
         program: &'static str,
         args: Vec<String>,
+        /// Argumentos depois do alvo (ex. o `-` de saída do `pdftotext`).
+        trailing: Vec<String>,
         install_hint: Option<&'static str>,
         /// Não lê stdin: recebe sempre um caminho (arquivo temporário, se o
         /// conteúdo estiver em memória).
         needs_path: bool,
+        /// O programa escreve o resultado no stderr (ex. `ffprobe`): o
+        /// stderr vai para o mesmo pipe do stdout.
+        merge_stderr: bool,
     },
     Internal(Internal),
     /// Renderizador interno cuja saída vira o stdin de outro backend
@@ -167,9 +166,27 @@ impl Backend {
         Self::External {
             program,
             args: args.iter().map(|a| (*a).to_owned()).collect(),
+            trailing: Vec::new(),
             install_hint,
             needs_path: false,
+            merge_stderr: false,
         }
+    }
+
+    /// Acrescenta argumentos depois do alvo.
+    pub fn trailing(mut self, extra: &[&str]) -> Self {
+        if let Self::External { trailing, .. } = &mut self {
+            trailing.extend(extra.iter().map(|a| (*a).to_owned()));
+        }
+        self
+    }
+
+    /// Junta o stderr do programa ao stdout.
+    pub fn merge_stderr(mut self) -> Self {
+        if let Self::External { merge_stderr, .. } = &mut self {
+            *merge_stderr = true;
+        }
+        self
     }
 
     /// Marca um backend externo que exige caminho e não lê stdin.
@@ -188,6 +205,17 @@ impl Backend {
         }
     }
 
+    /// O stderr do backend vai para o mesmo pipe do stdout.
+    pub fn merges_stderr(&self) -> bool {
+        matches!(
+            self,
+            Self::External {
+                merge_stderr: true,
+                ..
+            }
+        )
+    }
+
     /// O backend exige um caminho e não lê stdin.
     pub fn needs_path(&self) -> bool {
         matches!(
@@ -201,12 +229,14 @@ impl Backend {
 
     /// Programa e argumentos a executar; `None` para backend interno ou `Pipe`.
     ///
-    /// Para conteúdo em memória (`Input::Stdin`), o último argumento é `-` ou, se o backend exige caminho,
-    /// `stdin_path` (o arquivo temporário com o conteúdo).
+    /// Para conteúdo em memória (`Input::Stdin`), o alvo é `-` ou, se o
+    /// backend exige caminho, `stdin_path` (o arquivo temporário com o
+    /// conteúdo).
     pub fn argv(&self, input: &Input, stdin_path: &Path) -> Option<Vec<String>> {
         let Self::External {
             program,
             args,
+            trailing,
             needs_path,
             ..
         } = self
@@ -220,6 +250,7 @@ impl Backend {
             Input::Stdin if *needs_path => stdin_path.to_string_lossy().into_owned(),
             Input::Stdin => "-".to_owned(),
         });
+        argv.extend(trailing.iter().cloned());
         Some(argv)
     }
 }
@@ -319,7 +350,7 @@ mod tests {
     #[test]
     fn unimplemented_internal_is_skipped() {
         let dir = fake_path("internal", &["cat"]);
-        let chain = vec![Backend::Internal(Internal::Pdf), chain().remove(2)];
+        let chain = vec![Backend::Internal(Internal::Svg), chain().remove(2)];
         let res = resolve(&chain, dir.as_os_str()).unwrap();
         assert!(res.is_fallback());
     }
@@ -343,6 +374,20 @@ mod tests {
             ls.argv(&Input::Stdin, tmp).unwrap(),
             ["ls", "-la", "/tmp/x"]
         );
-        assert!(Backend::Internal(Internal::Pdf).argv(&file, tmp).is_none());
+        assert!(Backend::Internal(Internal::Svg).argv(&file, tmp).is_none());
+    }
+
+    #[test]
+    fn trailing_args_come_after_the_target() {
+        let tmp = Path::new("/tmp/x");
+        let pdf = Backend::external("pdftotext", &["-layout"], None).trailing(&["-"]);
+        assert_eq!(
+            pdf.argv(&Input::Target("a.pdf".into()), tmp).unwrap(),
+            ["pdftotext", "-layout", "a.pdf", "-"]
+        );
+        assert_eq!(
+            pdf.argv(&Input::Stdin, tmp).unwrap(),
+            ["pdftotext", "-layout", "-", "-"]
+        );
     }
 }

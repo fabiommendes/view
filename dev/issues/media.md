@@ -1,6 +1,6 @@
 ---
 type: issue
-status: todo
+status: in_review
 tags: [media]
 relatedTo: [dev/rfc/mvp.md]
 kind: enhancement
@@ -21,6 +21,6 @@ creator: claude
 
 ## Plano
 
-- [ ] Backend externo que junta stderr ao stdout (R1)
-- [ ] Cadeia de mídia com `ffprobe`, só com caminho (R1, R2)
-- [ ] Testes, `README.md` e issue em `in_review`
+- [x] Backend externo que junta stderr ao stdout (R1)
+- [x] Cadeia de mídia com `ffprobe`, só com caminho (R1, R2)
+- [x] Testes, `README.md` e issue em `in_review`
